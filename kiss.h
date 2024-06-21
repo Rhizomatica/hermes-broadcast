@@ -13,7 +13,7 @@
 #define CMD_AX25CALLSIGN 0x01 // AX25 Frame (7 chrs Call Signs) in VARA
 #define CMD_DATA 0x02 // VARA unformatted framte
 
-#define MAX_PAYLOAD 1522
+#define MAX_PAYLOAD 756 // ~ 18 frames at VARA Level 4
 
 void kiss_read(uint8_t sbyte);
 int kiss_write_frame(uint8_t* buffer, int frame_len);
