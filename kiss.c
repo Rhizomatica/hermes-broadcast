@@ -1,3 +1,11 @@
+/* KISS framer
+ *
+ * Copyright (C) 2020-2024 Rhizomatica
+ * Author: Rafael Diniz <rafael@rhizomatica.org>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ */
 
 #include <unistd.h>
 #include <stdbool.h>
