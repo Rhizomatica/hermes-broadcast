@@ -36,21 +36,21 @@ raptorq/tuple.o\
 raptorq/wrkmat.o\
 raptorq/nanorq.o
 
-all: transmitter receiver libnanorq.a
+all: transmitter receiver raptorq/libnanorq.a
 
-receiver: receiver.o libnanorq.a shm_posix.o ring_buffer_posix.o
+receiver: receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
 
-transmitter: transmitter.o libnanorq.a shm_posix.o ring_buffer_posix.o
+transmitter: transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
 
 oblas/liboblas.a:
 	$(MAKE) -C oblas CPPFLAGS+=$(OBLAS_CPPFLAGS)
 
-.PHONY: oblas_clean
-oblas_clean:
-	$(MAKE) -C oblas clean
-
-libnanorq.a: $(OBJ) oblas/liboblas.a
+raptorq/libnanorq.a: $(OBJ) oblas/liboblas.a
 	$(AR) rcs $@ $(OBJ) oblas/*.o
 
-clean: oblas_clean
-	$(RM) transmitter receiver raptorq/*.o *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old
+
+.PHONY: clean
+
+clean:
+	$(RM) transmitter receiver raptorq/*.o raptorq/*.a *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old
+	$(MAKE) -C oblas clean

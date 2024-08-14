@@ -13,21 +13,28 @@
 #include <string.h>
 #include <time.h>
 #include "ring_buffer_posix.h"
+#include "mercury_modes.h"
+#include "crc6.h"
 
 #include <nanorq.h>
 
 #define SHM_PAYLOAD_BUFFER_SIZE 131072
-#define CONFIG_PACKET_SIZE 12
+#define CONFIG_PACKET_SIZE 9
 #define SHM_PAYLOAD_NAME "/mercury-comm"
+
+#define TAG_SIZE 3
+#define HERMES_SIZE 1
+#define RQ_HEADER_SIZE TAG_SIZE+HERMES_SIZE
+
+#define MAX_ESI 65535
 
 uint8_t configuration_packet[CONFIG_PACKET_SIZE];
 
 void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
               uint32_t esi, cbuf_handle_t buffer)
 {
-    uint32_t tag = nanorq_tag(sbn, esi);
     size_t packet_size = nanorq_symbol_size(rq);
-    uint8_t data[packet_size];
+    uint8_t data[packet_size + RQ_HEADER_SIZE];
     memset(data, 0, packet_size);
     uint64_t written = nanorq_encode(rq, (void *)data, esi, sbn, myio);
 
@@ -38,7 +45,20 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
     }
     else
     {
+        uint32_t tag = nanorq_tag(sbn, esi);
+
+        memmove (data + RQ_HEADER_SIZE, data, packet_size);
+        // add our reduced tag
+        nanorq_tag_reduced(sbn, esi, data+1); // 3 bytes
+
+        // set payload packet type
+        data[0] = (PACKET_RQ_PAYLOAD << 6) & 0xff;
+        data[0] |= crc6_0X6F(1, data+1, packet_size + TAG_SIZE);
+
+
+
         fprintf(stdout, "Block written: sbn: %d esi %d tag data size: %lu data size: %lu\n",  sbn, esi, sizeof(tag), packet_size);
+
         write_buffer(buffer, (uint8_t *)&tag, sizeof(tag));
         write_buffer(buffer, data, packet_size);
     }
@@ -51,17 +71,28 @@ void write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
     // for all blocks TODO: shuffle the sbn traversal each call
     for (int sbn = 0; sbn < num_sbn; sbn++)
     {
-        int num_esi = nanorq_block_symbols(rq, sbn);
         write_esi(rq, myio, sbn, esi[sbn], buffer);
         esi[sbn]++;
-        if (esi[sbn] > ((1 << 24) - 1))
+//        if (esi[sbn] > ((1 << 24) - 1))
+        if (esi[sbn] > ((1 << 16) - 1))
+        {
+            printf("ESI LIMIT REACHED, PLEASE INCREASE-ME BACK TO 24 BITS!\n");
+            abort();
             esi[sbn] = 0;
+        }
     }
 }
 
-void write_configuration_packets(cbuf_handle_t buffer)
+void write_configuration_packets(int packet_size, cbuf_handle_t buffer)
 {
+    uint8_t data[packet_size + RQ_HEADER_SIZE];
+
+    memset(data, 0, packet_size);
+
     write_buffer(buffer, configuration_packet, CONFIG_PACKET_SIZE);
+    // stuffing bytes... could be used for something useful later on
+    if (packet_size > CONFIG_PACKET_SIZE)
+        write_buffer(buffer, data, packet_size - CONFIG_PACKET_SIZE);
 }
 
 
@@ -69,7 +100,7 @@ int main(int argc, char *argv[]) {
 
     if (argc < 3)
     {
-        printf("Usage: %s file_to_transmit packet_size\n", argv[0]);
+        printf("Usage: %s file_to_transmit mercury_modulation_mode\n", argv[0]);
         return -1;
     }
     char *infile = argv[1];
@@ -80,21 +111,32 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-  size_t filesize = myio->size(myio);
+    size_t filesize = myio->size(myio);
 
-  // determine chunks, symbol size, memory usage from size
-  size_t packet_size = strtol(argv[2], NULL, 10); // T
-  uint8_t align = 1;
+    int mod_mode = strtol(argv[2], NULL, 10);
+    size_t packet_size = 0;
 
-  srand((unsigned int)time(0));
+        // determine chunks, symbol size, memory usage from size
+    if (mod_mode <= 16)
+    {
+        // -3 for the tag and -1 of the header
+        packet_size = mercury_frame_size[mod_mode] - TAG_SIZE - 1; // T
+    }
 
-  nanorq *rq = nanorq_encoder_new(filesize, packet_size, align);
+    uint8_t align = 1;
 
-  if (rq == NULL)
-  {
-      fprintf(stdout, "Could not initialize encoder.\n");
-      return -1;
-  }
+    srand((unsigned int)time(0));
+
+    nanorq *rq = nanorq_encoder_new(filesize, packet_size, align);
+
+    if (rq == NULL)
+    {
+        fprintf(stdout, "Could not initialize encoder.\n");
+        return -1;
+    }
+
+  // 16 bits for esi
+  nanorq_set_max_esi(rq, MAX_ESI);
 
   int num_sbn = nanorq_blocks(rq);
   packet_size = nanorq_symbol_size(rq);
@@ -109,12 +151,17 @@ int main(int argc, char *argv[]) {
       nanorq_generate_symbols(rq, b, myio);
   }
 
+  memset(configuration_packet, 0, CONFIG_PACKET_SIZE);
+
+  nanorq_oti_common_reduced(rq, configuration_packet+1); // 5 bytes
+  nanorq_oti_scheme_specific_align1(rq, configuration_packet+6); // 3 bytes
+
+  configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
+  configuration_packet[0] |= crc6_0X6F(1, configuration_packet+1, 8);
+
+  // old stock behavior
   uint64_t oti_common = nanorq_oti_common(rq);
   uint32_t oti_scheme = nanorq_oti_scheme_specific(rq);
-
-  memcpy(configuration_packet, &oti_common, sizeof(oti_common));
-  memcpy(configuration_packet + sizeof(oti_common), &oti_scheme, sizeof(oti_scheme));
-
   printf("size oti_common: %lu %lu\n", sizeof(oti_common), oti_common);
   printf("size oti_scheme: %lu %u\n", sizeof(oti_scheme), oti_scheme);
 
@@ -123,7 +170,7 @@ int main(int argc, char *argv[]) {
 
   buffer = circular_buf_init_shm(SHM_PAYLOAD_BUFFER_SIZE, (char *) SHM_PAYLOAD_NAME);
 
-  write_configuration_packets(buffer);
+  write_configuration_packets(mercury_frame_size[mod_mode], buffer);
 
   while(1)
   {

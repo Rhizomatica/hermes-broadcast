@@ -4,11 +4,13 @@
 #include <stdlib.h>
 
 #include "ring_buffer_posix.h"
+#include "mercury_modes.h"
+#include "crc6.h"
 
 #include <nanorq.h>
 
 #define SHM_PAYLOAD_BUFFER_SIZE 131072
-#define CONFIG_PACKET_SIZE 12
+#define CONFIG_PACKET_SIZE 9
 #define MAX_BLOCKS 128
 #define SHM_PAYLOAD_NAME "/mercury-comm"
 
@@ -31,8 +33,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    uint32_t oti_scheme;
-    uint64_t oti_common;
+    uint32_t oti_scheme = 0;
+    uint64_t oti_common = 0;
 
     cbuf_handle_t buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
 
@@ -44,8 +46,32 @@ int main(int argc, char *argv[])
 
     read_buffer(buffer, configuration_packet, CONFIG_PACKET_SIZE);
 
-    memcpy(&oti_common, configuration_packet, sizeof(oti_common));
-    memcpy(&oti_scheme, configuration_packet + sizeof(oti_common), sizeof(oti_scheme));
+    int packet_type = (configuration_packet[0] >> 6) & 0x3;
+    printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
+    uint16_t crc6_local = configuration_packet[0] & 0x3f;
+    uint16_t crc6_calc = crc6_0X6F(1, configuration_packet+1, 8);
+
+    if (crc6_local != crc6_calc)
+    {
+        printf("CRC does not match!\n");
+        abort();
+    }
+
+    /* transfer length */
+    oti_common |= (uint64_t) (configuration_packet[1] & 0xff) << 24;
+    oti_common |= (uint64_t) (configuration_packet[2] & 0xff) << 32;
+    oti_common |= (uint64_t) (configuration_packet[3] & 0xff) << 40;
+    /* symbol size */
+    oti_common |= configuration_packet[4] & 0xff;
+    oti_common |= (configuration_packet[5] & 0xff) << 8;
+
+    /* number of source blocks */
+    oti_scheme |= (configuration_packet[6] & 0xff) << 24;
+    /* number of sub-blocks */
+    oti_scheme |= (configuration_packet[7] & 0xff) << 8;
+    oti_scheme |= (configuration_packet[8] & 0xff) << 16;
+    /* symbol alignment */
+    oti_scheme |=  1;
 
     printf("size oti_common: %lu %lu\n", sizeof(oti_common), oti_common);
     printf("size oti_scheme: %lu %u\n", sizeof(oti_scheme), oti_scheme);
