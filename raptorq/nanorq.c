@@ -364,7 +364,7 @@ uint8_t *nanorq_tag_reduced(uint8_t sbn, uint32_t esi, uint8_t *buffer)
     buffer[0] = sbn;
     buffer[1] = esi & 0xff;
     buffer[2] = (esi >> 8) & 0xff;
-    buffer[3] = (esi >> 16) & 0xff;
+    // buffer[3] = (esi >> 16) & 0xff;
     return buffer;
 }
 

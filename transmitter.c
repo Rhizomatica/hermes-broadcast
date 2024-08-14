@@ -18,14 +18,6 @@
 
 #include <nanorq.h>
 
-#define SHM_PAYLOAD_BUFFER_SIZE 131072
-#define CONFIG_PACKET_SIZE 9
-#define SHM_PAYLOAD_NAME "/mercury-comm"
-
-#define TAG_SIZE 3
-#define HERMES_SIZE 1
-#define RQ_HEADER_SIZE TAG_SIZE+HERMES_SIZE
-
 #define MAX_ESI 65535
 
 uint8_t configuration_packet[CONFIG_PACKET_SIZE];
@@ -55,12 +47,11 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
         data[0] = (PACKET_RQ_PAYLOAD << 6) & 0xff;
         data[0] |= crc6_0X6F(1, data+1, packet_size + TAG_SIZE);
 
-
-
         fprintf(stdout, "Block written: sbn: %d esi %d tag data size: %lu data size: %lu\n",  sbn, esi, sizeof(tag), packet_size);
-
-        write_buffer(buffer, (uint8_t *)&tag, sizeof(tag));
-        write_buffer(buffer, data, packet_size);
+        write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
+        for (int i = 0; i < packet_size + RQ_HEADER_SIZE; i++)
+            printf("%02x ", data[i]);
+        printf("\n");
     }
 }
 
@@ -76,14 +67,14 @@ void write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
 //        if (esi[sbn] > ((1 << 24) - 1))
         if (esi[sbn] > ((1 << 16) - 1))
         {
-            printf("ESI LIMIT REACHED, PLEASE INCREASE-ME BACK TO 24 BITS!\n");
+            // printf("ESI LIMIT REACHED, PLEASE INCREASE-ME BACK TO 24 BITS!\n");
             abort();
             esi[sbn] = 0;
         }
     }
 }
 
-void write_configuration_packets(int packet_size, cbuf_handle_t buffer)
+void write_configuration_packet(int packet_size, cbuf_handle_t buffer)
 {
     uint8_t data[packet_size + RQ_HEADER_SIZE];
 
@@ -113,14 +104,25 @@ int main(int argc, char *argv[]) {
 
     size_t filesize = myio->size(myio);
 
+    // (2 ^ 24) - 1 is the maximum size we support for now (a.k.a. 16 MB)
+    if (filesize > 16777215)
+    {
+        printf("File to transmit exceed 16MB. Input size %lu: Max size: %d\n", filesize, 16777215);
+        exit(-1);
+    }
+
     int mod_mode = strtol(argv[2], NULL, 10);
     size_t packet_size = 0;
 
-        // determine chunks, symbol size, memory usage from size
+    // determine chunks, symbol size, memory usage from size
     if (mod_mode <= 16)
     {
-        // -3 for the tag and -1 of the header
-        packet_size = mercury_frame_size[mod_mode] - TAG_SIZE - 1; // T
+        packet_size = mercury_frame_size[mod_mode] - (uint32_t) RQ_HEADER_SIZE; // T
+    }
+    else
+    {
+        printf("Valid modes range from 0 to 16 (inclusive).\n");
+        exit(-1);
     }
 
     uint8_t align = 1;
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
 
   memset(esi, 0, num_sbn * sizeof(uint32_t));
 
-  printf("sbn (blocks) = %d\npacket_size: %lu", num_sbn, packet_size);
+  printf("sbn (blocks) = %d\npacket_size: %lu\n", num_sbn, packet_size);
 
   for (int b = 0; b < num_sbn; b++)
   {
@@ -157,24 +159,24 @@ int main(int argc, char *argv[]) {
   nanorq_oti_scheme_specific_align1(rq, configuration_packet+6); // 3 bytes
 
   configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
-  configuration_packet[0] |= crc6_0X6F(1, configuration_packet+1, 8);
+  configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
 
   // old stock behavior
   uint64_t oti_common = nanorq_oti_common(rq);
   uint32_t oti_scheme = nanorq_oti_scheme_specific(rq);
-  printf("size oti_common: %lu %lu\n", sizeof(oti_common), oti_common);
-  printf("size oti_scheme: %lu %u\n", sizeof(oti_scheme), oti_scheme);
-
+  printf("oti_common: %lu\n", oti_common);
+  printf("oti_scheme: %u\n", oti_scheme);
 
   cbuf_handle_t buffer;
 
   buffer = circular_buf_init_shm(SHM_PAYLOAD_BUFFER_SIZE, (char *) SHM_PAYLOAD_NAME);
 
-  write_configuration_packets(mercury_frame_size[mod_mode], buffer);
-
   while(1)
+  //
   {
       // write_configuration_packets(buffer);
+      write_configuration_packet(mercury_frame_size[mod_mode], buffer);
+
       for (int i = 0; i < num_sbn; i++)
       {
           write_interleaved_block_packets(rq, myio, esi, buffer);
