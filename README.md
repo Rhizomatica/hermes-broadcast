@@ -1,7 +1,7 @@
 # hermes-broadcast
 
-High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for broadcasting data in HF through any KISS enabled modem.
+High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for broadcasting data through HF.
 
-Initial development state, nothing working yet.
+Use Mercury modem in MODE_SHM. Data carousel mechanism implemented using RaptorQ fountain (NanoRQ).
 
 Author: Rafael Diniz
