@@ -129,6 +129,7 @@ int main(int argc, char *argv[])
 
     running = true;
     signal(SIGQUIT, exit_system);
+    signal(SIGINT, exit_system);
     signal(SIGTERM, exit_system);
 
     bool configuration_received = false;
