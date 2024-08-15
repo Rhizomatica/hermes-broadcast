@@ -174,7 +174,7 @@ try_again:
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown", spinner[spinner_anim % 4]);
+        printf("\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config.":"unknown", spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 
         if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
@@ -198,7 +198,7 @@ try_again:
 
             configuration_received = true;
 
-            printf(" RaptorQ decoder initialized!"); fflush(stdout);
+            printf(" RaptorQ initialized!"); fflush(stdout);
 
             continue;
         }
@@ -255,11 +255,11 @@ try_again:
             {
                 if (!nanorq_repair_block(rq, myio, sbn))
                 {
-                    fprintf(stdout, "decode of sbn %d failed.\n", sbn);
+                    fprintf(stdout, "Decode of sbn %d failed. Continuing...\n", sbn);
                 }
                 else
                 {
-                    fprintf(stdout, "\nDECODE OF BLOCK %d SUCCESSFUL!.\n", sbn);
+                    fprintf(stdout, "\x1b[2K\rDECODE OF BLOCK %d SUCCESSFUL!", sbn);
                     block_decoded[sbn] = true;
                 }
             }
@@ -273,7 +273,7 @@ try_again:
 
             if (file_received == true)
             {
-                printf("\nFILE SUCCESSFULLY RECEIVED!\n");
+                printf("\x1b[2K\rFILE SUCCESSFULLY RECEIVED!\n");
                 goto success;
             }
             have_more_symbols = false;
