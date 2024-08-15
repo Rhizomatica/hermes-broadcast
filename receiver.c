@@ -133,6 +133,8 @@ int main(int argc, char *argv[])
 try_again:
 #endif
 
+    uint32_t spinner_anim = 0; char spinner[] = ".oOo";
+
     while (1)
     {
         read_buffer(buffer, data_frame, frame_size);
@@ -141,10 +143,10 @@ try_again:
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("\rPacket type: 0x%02x (%s) ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown");
+        printf("\rPacket type: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown", spinner[spinner_anim % 4]);
+        spinner_anim++;
 
-        if ((configuration_received == false) &&
-            packet_type == PACKET_RQ_CONFIG)
+        if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
         {
             oti_common = parse_tag_oti_common(data_frame);
             oti_scheme = parse_tag_oti_scheme(data_frame);
@@ -165,13 +167,12 @@ try_again:
 
             configuration_received = true;
 
-            printf("RaptorQ decoder initialized!\n");
+            printf(" RaptorQ decoder initialized!\n");
 
             continue;
         }
 
-        if ((configuration_received == true) &&
-            packet_type == PACKET_RQ_CONFIG)
+        if (configuration_received == true && packet_type == PACKET_RQ_CONFIG)
         {
             uint64_t oti_common_local = parse_tag_oti_common(data_frame);
             uint32_t oti_scheme_local = parse_tag_oti_scheme(data_frame);
@@ -217,7 +218,7 @@ try_again:
                 have_more_symbols = false;
             }
 
-            fprintf(stdout, "Block: %d  Recv: %d Needed: %lu\n", sbn, esi[sbn], nanorq_block_symbols(rq, sbn));
+            fprintf(stdout, " Block: %3d  Recv: %5d Needed: %4lu", sbn, esi[sbn], nanorq_block_symbols(rq, sbn));
 
             // if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
             if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
