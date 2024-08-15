@@ -174,7 +174,7 @@ try_again:
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config.":"unknown", spinner[spinner_anim % 4]);
+        printf("\x1b[2K\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config.":"unknown", spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 
         if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
