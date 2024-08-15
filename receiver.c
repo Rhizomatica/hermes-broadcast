@@ -141,7 +141,7 @@ try_again:
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
+        printf("\rPacket type: 0x%02x (%s) ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown");
 
         if ((configuration_received == false) &&
             packet_type == PACKET_RQ_CONFIG)
@@ -165,7 +165,7 @@ try_again:
 
             configuration_received = true;
 
-            printf("Configuration Packet Received. RaptorQ decoder successfully initialized!\n");
+            printf("RaptorQ decoder initialized!\n");
 
             continue;
         }
@@ -176,6 +176,7 @@ try_again:
             uint64_t oti_common_local = parse_tag_oti_common(data_frame);
             uint32_t oti_scheme_local = parse_tag_oti_scheme(data_frame);
 
+            printf("\n");
 
             // nanorq_num_repair();
             if((oti_common_local != oti_common) ||
@@ -216,7 +217,7 @@ try_again:
                 have_more_symbols = false;
             }
 
-            fprintf(stdout, "Block %d, remaining: %u received %d dups %d\n", sbn, nanorq_num_missing(rq, sbn), esi[sbn], dups);
+            fprintf(stdout, "Block: %d  Recv: %d Needed: %lu\n", sbn, esi[sbn], nanorq_block_symbols(rq, sbn));
 
             // if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
             if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)

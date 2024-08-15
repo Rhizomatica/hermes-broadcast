@@ -47,7 +47,7 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
         data[0] = (PACKET_RQ_PAYLOAD << 6) & 0xff;
         data[0] |= crc6_0X6F(1, data+1, packet_size + TAG_SIZE);
 
-        fprintf(stdout, "Block written: sbn: %d esi %d tag data size: %lu data size: %lu\n",  sbn, esi, sizeof(tag), packet_size);
+        fprintf(stdout, "\rBlock: %2d  Tx: %3d",  sbn, esi);
         write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
         // for (int i = 0; i < packet_size + RQ_HEADER_SIZE; i++)
         //    printf("%02x ", data[i]);
