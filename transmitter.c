@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
 
   memset(esi, 0, num_sbn * sizeof(uint32_t));
 
-  printf("RaptorQ initialized: sbn (blocks) = %d | packet_size: %lu\n", num_sbn, packet_size);
+  printf("RaptorQ initialized: sbn (blocks) = %d  Packet_size: %lu\n", num_sbn, packet_size);
 
   for (int b = 0; b < num_sbn; b++)
   {
