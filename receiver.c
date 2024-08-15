@@ -167,12 +167,12 @@ try_again:
     {
         if (size_buffer(buffer) < frame_size)
         {
-            printf("\rWaiting for data %s", &dots[dot--]);
-            if (dot == 0)
+            if (dot == -1)
             {
-                printf("\x1b[2K");
+                printf("\x1b[2K"); // clear line
                 dot = 9;
             }
+            printf("\rWaiting for data %s", &dots[dot--]);
             fflush(stdout);
             sleep(2);
             continue;
