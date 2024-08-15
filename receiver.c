@@ -246,7 +246,6 @@ try_again:
             }
             have_more_symbols = false;
         }
-        fflush(stdout);
     }
 success:
 
