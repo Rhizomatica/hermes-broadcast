@@ -32,10 +32,6 @@ void exit_system(int sig)
 {
     printf("Exiting...\n");
     running = false;
-
-    // we just exit anyway if the shutdown producedure gets stuck somewhere
-    sleep(2);
-    exit(EXIT_FAILURE);
 }
 
 void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,

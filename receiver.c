@@ -34,10 +34,6 @@ void exit_system(int sig)
 {
     printf("Exiting...\n");
     running = false;
-
-    // we just exit anyway if the shutdown producedure gets stuck somewhere
-    usleep(2000000);
-    exit(EXIT_FAILURE);
 }
 
 int8_t parse_frame_header(uint8_t *data_frame, uint32_t frame_size)
