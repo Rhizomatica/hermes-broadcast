@@ -4,6 +4,8 @@
 # @file
 # @version 0.1
 
+uname_p := $(shell uname -m)
+
 CC=gcc
 
 CPPFLAGS = -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64
