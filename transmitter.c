@@ -196,6 +196,8 @@ int main(int argc, char *argv[]) {
             goto finish;
     }
 
+    printf("Transmitter shutdown.\n");
+
 finish:
     nanorq_free(rq);
     myio->destroy(myio);

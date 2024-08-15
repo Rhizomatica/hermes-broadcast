@@ -281,8 +281,9 @@ try_again:
     }
 success:
 
-    nanorq_free(rq);
+    printf("Receiver shutdown.\n");
 
+    nanorq_free(rq);
 
 //enable loop
 #ifdef ENABLE_LOOP
