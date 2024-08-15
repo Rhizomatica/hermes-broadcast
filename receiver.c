@@ -167,10 +167,14 @@ try_again:
     {
         if (size_buffer(buffer) < frame_size)
         {
-            printf("Waiting for data %s", &dots[dot--]);
+            printf("\rWaiting for data %s", &dots[dot--]);
             if (dot == 0)
+            {
+                printf("\x1b[2K");
                 dot = 9;
-            sleep(1);
+            }
+            fflush(stdout);
+            sleep(2);
             continue;
         }
         read_buffer(buffer, data_frame, frame_size);
