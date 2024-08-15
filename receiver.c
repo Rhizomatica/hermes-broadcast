@@ -165,6 +165,8 @@ try_again:
 
             configuration_received = true;
 
+            printf("Configuration Packet Received. RaptorQ decoder successfully initialized!\n");
+
             continue;
         }
 
@@ -174,9 +176,7 @@ try_again:
             uint64_t oti_common_local = parse_tag_oti_common(data_frame);
             uint32_t oti_scheme_local = parse_tag_oti_scheme(data_frame);
 
-            // printf("oti_common_local: %llu\n", oti_common_local);
-            // printf("oti_common: %llu\n", oti_common);
-            printf("Packet received: RaptorQ decoder configured!\n");
+
             // nanorq_num_repair();
             if((oti_common_local != oti_common) ||
                (oti_scheme_local != oti_scheme))
@@ -196,7 +196,7 @@ try_again:
             uint8_t sbn = data_frame[1];
             uint32_t esi_local = (uint32_t) data_frame[2] | ((uint32_t) data_frame[3] << 8);
             tag = nanorq_tag(sbn, esi_local);
-            printf("Packet received: %u SBN: %hhu ESI %u\n", tag, sbn, esi_local);
+            // printf("Packet received: %u SBN: %hhu ESI %u\n", tag, sbn, esi_local);
 
             int ret = nanorq_decoder_add_symbol(rq, (void *)data_frame + RQ_HEADER_SIZE, tag, myio);
             if (NANORQ_SYM_ERR == ret)
@@ -216,11 +216,7 @@ try_again:
                 have_more_symbols = false;
             }
 
-            fprintf(stdout, "Block %d, esi_sbn %d is %d packets, lost %d, dups %d have %d repair\n", sbn, esi[sbn],
-                    (unsigned)nanorq_block_symbols(rq, sbn),
-                    (unsigned)nanorq_num_missing(rq, sbn),
-                    dups,
-                    (unsigned)nanorq_num_repair(rq, sbn));
+            fprintf(stdout, "Block %d, remaining: %u received %d dups %d\n", sbn, nanorq_num_missing(rq, sbn), esi[sbn], dups);
 
             // if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
             if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
