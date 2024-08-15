@@ -36,7 +36,7 @@ void exit_system(int sig)
     running = false;
 
     // we just exit anyway if the shutdown producedure gets stuck somewhere
-    sleep(2);
+    usleep(2000000);
     exit(EXIT_FAILURE);
 }
 
@@ -160,21 +160,12 @@ int main(int argc, char *argv[])
 try_again:
 #endif
 
-    int dot = 9;
-    char dots[11] = "..........";
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
     while (running)
     {
         if (size_buffer(buffer) < frame_size)
         {
-            if (dot == -1)
-            {
-                printf("\x1b[2K"); // clear line
-                dot = 9;
-            }
-            printf("\rWaiting for data %s", &dots[dot--]);
-            fflush(stdout);
-            sleep(2);
+            usleep(1500000); // 1.5s
             continue;
         }
         read_buffer(buffer, data_frame, frame_size);
