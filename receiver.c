@@ -160,9 +160,19 @@ int main(int argc, char *argv[])
 try_again:
 #endif
 
+    int dot = 9;
+    char dots[11] = "..........";
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
     while (running)
     {
+        if (size_buffer(buffer) < frame_size)
+        {
+            printf("Waiting for data %s", &dots[dot--]);
+            if (dot == 0)
+                dot = 9;
+            sleep(1);
+            continue;
+        }
         read_buffer(buffer, data_frame, frame_size);
 
         int8_t packet_type = parse_frame_header(data_frame, frame_size);
