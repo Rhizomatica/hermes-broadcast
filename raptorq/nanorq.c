@@ -528,8 +528,10 @@ int nanorq_decoder_add_symbol(nanorq *rq, void *data, uint32_t tag,
     return NANORQ_SYM_IGN; // no repair needed.
   }
 
+
   if (bitmask_check(&dec->repair_mask, esi))
     return NANORQ_SYM_DUP; // already got this esi
+
 
   if (esi < dec->K) {
     // write original symbol to decode mat and output stream

@@ -38,6 +38,10 @@ raptorq/nanorq.o
 
 all: transmitter receiver raptorq/libnanorq.a
 
+receiver.o: receiver.c
+
+transmitter.o: transmitter.c
+
 receiver: receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
 
 transmitter: transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a

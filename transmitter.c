@@ -49,13 +49,13 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
 
         fprintf(stdout, "Block written: sbn: %d esi %d tag data size: %lu data size: %lu\n",  sbn, esi, sizeof(tag), packet_size);
         write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
-        for (int i = 0; i < packet_size + RQ_HEADER_SIZE; i++)
-            printf("%02x ", data[i]);
-        printf("\n");
+        // for (int i = 0; i < packet_size + RQ_HEADER_SIZE; i++)
+        //    printf("%02x ", data[i]);
+        // printf("\n");
     }
 }
 
-void write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi, cbuf_handle_t buffer)
+bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi, cbuf_handle_t buffer)
 {
     int num_sbn = nanorq_blocks(rq);
 
@@ -68,10 +68,11 @@ void write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
         if (esi[sbn] > ((1 << 16) - 1))
         {
             // printf("ESI LIMIT REACHED, PLEASE INCREASE-ME BACK TO 24 BITS!\n");
-            abort();
-            esi[sbn] = 0;
+            return false;
+            // esi[sbn] = 0;
         }
     }
+    return true;
 }
 
 void write_configuration_packet(int packet_size, cbuf_handle_t buffer)
@@ -162,12 +163,6 @@ int main(int argc, char *argv[]) {
   configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
   configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
 
-  // old stock behavior
-  // uint64_t oti_common = nanorq_oti_common(rq);
-  // uint32_t oti_scheme = nanorq_oti_scheme_specific(rq);
-  // printf("oti_common: %lu\n", oti_common);
-  // printf("oti_scheme: %u\n", oti_scheme);
-
   cbuf_handle_t buffer;
 
   buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
@@ -178,13 +173,11 @@ int main(int argc, char *argv[]) {
       // 1 configuration packet per each sbn "slice"
       write_configuration_packet(mercury_frame_size[mod_mode], buffer);
 
-      for (int i = 0; i < num_sbn; i++)
-      {
-          write_interleaved_block_packets(rq, myio, esi, buffer);
-      }
+      if (write_interleaved_block_packets(rq, myio, esi, buffer) == false)
+          goto finish;
   }
 
-
+finish:
   nanorq_free(rq);
   myio->destroy(myio);
 

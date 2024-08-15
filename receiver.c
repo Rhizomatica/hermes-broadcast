@@ -7,6 +7,9 @@
 #include "mercury_modes.h"
 #include "crc6.h"
 
+// #define ENABLE_LOOP // for debug purposes...
+
+
 #include <nanorq.h>
 
 #define MAX_ESI 65535
@@ -126,6 +129,10 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+#ifdef ENABLE_LOOP
+try_again:
+#endif
+
     while (1)
     {
         read_buffer(buffer, data_frame, frame_size);
@@ -134,7 +141,7 @@ int main(int argc, char *argv[])
         if (packet_type < 0)
             continue; // bad crc
 
-        // printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
+        printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
 
         if ((configuration_received == false) &&
             packet_type == PACKET_RQ_CONFIG)
@@ -152,6 +159,8 @@ int main(int argc, char *argv[])
                 continue;
             }
 
+            nanorq_set_max_esi(rq, MAX_ESI);
+
             num_sbn = nanorq_blocks(rq);
 
             configuration_received = true;
@@ -167,7 +176,8 @@ int main(int argc, char *argv[])
 
             // printf("oti_common_local: %llu\n", oti_common_local);
             // printf("oti_common: %llu\n", oti_common);
-
+            printf("Packet received: RaptorQ decoder configured!\n");
+            // nanorq_num_repair();
             if((oti_common_local != oti_common) ||
                (oti_scheme_local != oti_scheme))
             {
@@ -235,6 +245,7 @@ int main(int argc, char *argv[])
 
             if (file_received == true)
             {
+                printf("FILE SUCCESSFULLY RECEIVED!\n");
                 goto success;
             }
             have_more_symbols = false;
@@ -243,6 +254,13 @@ int main(int argc, char *argv[])
 success:
 
     nanorq_free(rq);
+
+
+//enable loop
+#ifdef ENABLE_LOOP
+    configuration_received = false;
+    goto try_again;
+#endif
     myio->destroy(myio);
 
     circular_buf_free_shm(buffer);
