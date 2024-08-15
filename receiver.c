@@ -142,7 +142,7 @@ try_again:
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("\rPacket type: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown", spinner[spinner_anim % 4]);
+        printf("\rPkt type: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config":"unknown", spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 
         if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
@@ -180,7 +180,7 @@ try_again:
             if((oti_common_local != oti_common) ||
                (oti_scheme_local != oti_scheme))
             {
-                printf("need to reset the stuff. TODO\n");
+                printf("Need to reset the system to new file. TODO!\n");
                 return (-1);
             }
             continue;
@@ -215,7 +215,7 @@ try_again:
                 have_more_symbols = false;
             }
 
-            fprintf(stdout, " Block: %3d  Recv: %5d Needed: %4lu", sbn, esi[sbn], nanorq_block_symbols(rq, sbn));
+            fprintf(stdout, "Block: %3d  Recv: %3d Of %3lu", sbn, esi[sbn], nanorq_block_symbols(rq, sbn));
             fflush(stdout);
 
             // if (esi[sbn] >= nanorq_block_symbols(rq, sbn) && have_more_symbols)
@@ -227,7 +227,7 @@ try_again:
                 }
                 else
                 {
-                    fprintf(stdout, "DECODE OF BLOCK %d SUCCESSFUL!.\n", sbn);
+                    fprintf(stdout, "\nDECODE OF BLOCK %d SUCCESSFUL!.\n", sbn);
                     block_decoded[sbn] = true;
                 }
             }
@@ -241,7 +241,7 @@ try_again:
 
             if (file_received == true)
             {
-                printf("FILE SUCCESSFULLY RECEIVED!\n");
+                printf("\nFILE SUCCESSFULLY RECEIVED!\n");
                 goto success;
             }
             have_more_symbols = false;
