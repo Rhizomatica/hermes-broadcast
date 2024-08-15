@@ -32,7 +32,7 @@ bool running;
 
 void exit_system(int sig)
 {
-    printf("Exiting...\n");
+    printf("Exiting... ");
     running = false;
 }
 
@@ -277,7 +277,7 @@ try_again:
     }
 success:
 
-    printf("Receiver shutdown.\n");
+    printf("shutdown.\n");
 
     nanorq_free(rq);
 

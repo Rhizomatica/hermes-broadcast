@@ -30,7 +30,7 @@ uint8_t configuration_packet[CONFIG_PACKET_SIZE];
 
 void exit_system(int sig)
 {
-    printf("Exiting...\n");
+    printf("Exiting... ");
     running = false;
 }
 
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
             goto finish;
     }
 
-    printf("Transmitter shutdown.\n");
+    printf("shutdown.\n");
 
 finish:
     nanorq_free(rq);
