@@ -1,7 +1,17 @@
+/* RaptorQ fountain code receiver
+ *
+ * Copyright (C) 2020-2024 Rhizomatica
+ * Author: Rafael Diniz <rafael@rhizomatica.org>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ */
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
 
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
@@ -17,6 +27,18 @@
 #define MAX_BLOCKS 128
 
 bool block_decoded[MAX_BLOCKS];
+
+bool running;
+
+void exit_system(int sig)
+{
+    printf("Exiting...\n");
+    running = false;
+
+    // we just exit anyway if the shutdown producedure gets stuck somewhere
+    sleep(2);
+    exit(EXIT_FAILURE);
+}
 
 int8_t parse_frame_header(uint8_t *data_frame, uint32_t frame_size)
 {
@@ -105,6 +127,10 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
+    running = true;
+    signal(SIGQUIT, exit_system);
+    signal(SIGTERM, exit_system);
+
     bool configuration_received = false;
 
     uint8_t data_frame[frame_size];
@@ -134,7 +160,7 @@ try_again:
 #endif
 
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
-    while (1)
+    while (running)
     {
         read_buffer(buffer, data_frame, frame_size);
 

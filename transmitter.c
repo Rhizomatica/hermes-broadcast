@@ -1,7 +1,7 @@
 /* RaptorQ fountain code transmitter
  *
- * Copyright (C) 2020-2024 by Rafael Diniz <rafael@rhizomatica.org>
- * All Rights Reserved
+ * Copyright (C) 2020-2024 Rhizomatica
+ * Author: Rafael Diniz <rafael@rhizomatica.org>
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
@@ -12,15 +12,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
+#include <unistd.h>
+
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
 #include "crc6.h"
 
 #include <nanorq.h>
 
+
 #define MAX_ESI 65535
 
+bool running;
+
 uint8_t configuration_packet[CONFIG_PACKET_SIZE];
+
+void exit_system(int sig)
+{
+    printf("Exiting...\n");
+    running = false;
+
+    // we just exit anyway if the shutdown producedure gets stuck somewhere
+    sleep(2);
+    exit(EXIT_FAILURE);
+}
 
 void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
               uint32_t esi, cbuf_handle_t buffer)
@@ -128,6 +144,10 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
+    running = true;
+    signal(SIGQUIT, exit_system);
+    signal(SIGTERM, exit_system);
+
     uint8_t align = 1;
 
     srand((unsigned int)time(0));
@@ -140,8 +160,8 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-  // 16 bits for esi
-  nanorq_set_max_esi(rq, MAX_ESI);
+    // 16 bits for esi
+    nanorq_set_max_esi(rq, MAX_ESI);
 
   int num_sbn = nanorq_blocks(rq);
   packet_size = nanorq_symbol_size(rq);
@@ -168,7 +188,7 @@ int main(int argc, char *argv[]) {
 
   buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
 
-  while(1)
+  while(running)
   //
   {
       // 1 configuration packet per each sbn "slice"
