@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
         if (packet_type < 0)
             continue; // bad crc
 
-        printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
+        // printf("Packet type: %d (0x00 raw, 0x01 uucp, 0x02 rq_config, 0x03 rq_payload)\n", packet_type);
 
         if ((configuration_received == false) &&
             packet_type == PACKET_RQ_CONFIG)
@@ -142,8 +142,8 @@ int main(int argc, char *argv[])
             oti_common = parse_tag_oti_common(data_frame);
             oti_scheme = parse_tag_oti_scheme(data_frame);
 
-            printf("size oti_common: %lu %lu\n", sizeof(oti_common), oti_common);
-            printf("size oti_scheme: %lu %u\n", sizeof(oti_scheme), oti_scheme);
+            // printf("size oti_common: %lu %lu\n", sizeof(oti_common), oti_common);
+            // printf("size oti_scheme: %lu %u\n", sizeof(oti_scheme), oti_scheme);
 
             rq = nanorq_decoder_new(oti_common, oti_scheme);
             if (rq == NULL)
@@ -165,8 +165,8 @@ int main(int argc, char *argv[])
             uint64_t oti_common_local = parse_tag_oti_common(data_frame);
             uint32_t oti_scheme_local = parse_tag_oti_scheme(data_frame);
 
-            printf("oti_common_local: %llu\n", oti_common_local);
-            printf("oti_common: %llu\n", oti_common);
+            // printf("oti_common_local: %llu\n", oti_common_local);
+            // printf("oti_common: %llu\n", oti_common);
 
             if((oti_common_local != oti_common) ||
                (oti_scheme_local != oti_scheme))
@@ -179,14 +179,14 @@ int main(int argc, char *argv[])
         if ((configuration_received == true) &&
             packet_type == PACKET_RQ_PAYLOAD)
         {
-            for (int i = 0; i < frame_size; i++)
-                printf("%02x ", data_frame[i]);
-            printf("\n");
+            // for (int i = 0; i < frame_size; i++)
+            //    printf("%02x ", data_frame[i]);
+            // printf("\n");
 
             uint8_t sbn = data_frame[1];
             uint32_t esi_local = (uint32_t) data_frame[2] | ((uint32_t) data_frame[3] << 8);
             tag = nanorq_tag(sbn, esi_local);
-            printf("Tag received: %u SBN: %hhu ESI %u\n", tag, sbn, esi_local);
+            printf("Packet received: %u SBN: %hhu ESI %u\n", tag, sbn, esi_local);
 
             int ret = nanorq_decoder_add_symbol(rq, (void *)data_frame + RQ_HEADER_SIZE, tag, myio);
             if (NANORQ_SYM_ERR == ret)

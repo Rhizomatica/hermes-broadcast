@@ -92,6 +92,7 @@ int main(int argc, char *argv[]) {
     if (argc < 3)
     {
         printf("Usage: %s file_to_transmit mercury_modulation_mode\n", argv[0]);
+        printf("mercury_modulation_mode ranges from 0 to 16 (inclusive)\n");
         return -1;
     }
     char *infile = argv[1];
@@ -121,7 +122,7 @@ int main(int argc, char *argv[]) {
     }
     else
     {
-        printf("Valid modes range from 0 to 16 (inclusive).\n");
+        printf("Invalid mode. Valid modes range from 0 to 16 (inclusive).\n");
         exit(-1);
     }
 
@@ -146,7 +147,7 @@ int main(int argc, char *argv[]) {
 
   memset(esi, 0, num_sbn * sizeof(uint32_t));
 
-  printf("sbn (blocks) = %d\npacket_size: %lu\n", num_sbn, packet_size);
+  printf("RaptorQ initialized: sbn (blocks) = %d | packet_size: %lu\n", num_sbn, packet_size);
 
   for (int b = 0; b < num_sbn; b++)
   {
@@ -162,19 +163,19 @@ int main(int argc, char *argv[]) {
   configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
 
   // old stock behavior
-  uint64_t oti_common = nanorq_oti_common(rq);
-  uint32_t oti_scheme = nanorq_oti_scheme_specific(rq);
-  printf("oti_common: %lu\n", oti_common);
-  printf("oti_scheme: %u\n", oti_scheme);
+  // uint64_t oti_common = nanorq_oti_common(rq);
+  // uint32_t oti_scheme = nanorq_oti_scheme_specific(rq);
+  // printf("oti_common: %lu\n", oti_common);
+  // printf("oti_scheme: %u\n", oti_scheme);
 
   cbuf_handle_t buffer;
 
-  buffer = circular_buf_init_shm(SHM_PAYLOAD_BUFFER_SIZE, (char *) SHM_PAYLOAD_NAME);
+  buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
 
   while(1)
   //
   {
-      // write_configuration_packets(buffer);
+      // 1 configuration packet per each sbn "slice"
       write_configuration_packet(mercury_frame_size[mod_mode], buffer);
 
       for (int i = 0; i < num_sbn; i++)
@@ -187,7 +188,6 @@ int main(int argc, char *argv[]) {
   nanorq_free(rq);
   myio->destroy(myio);
 
-  circular_buf_destroy_shm(buffer, SHM_PAYLOAD_BUFFER_SIZE, (char *) SHM_PAYLOAD_NAME);
   circular_buf_free_shm(buffer);
 
   return 0;
