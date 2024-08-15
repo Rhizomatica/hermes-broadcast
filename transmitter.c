@@ -53,8 +53,6 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
     }
     else
     {
-        uint32_t tag = nanorq_tag(sbn, esi);
-
         memmove (data + RQ_HEADER_SIZE, data, packet_size);
         // add our reduced tag
         nanorq_tag_reduced(sbn, esi, data+1); // 3 bytes
@@ -163,46 +161,45 @@ int main(int argc, char *argv[]) {
     // 16 bits for esi
     nanorq_set_max_esi(rq, MAX_ESI);
 
-  int num_sbn = nanorq_blocks(rq);
-  packet_size = nanorq_symbol_size(rq);
-  uint32_t esi[num_sbn];
+    int num_sbn = nanorq_blocks(rq);
+    packet_size = nanorq_symbol_size(rq);
+    uint32_t esi[num_sbn];
 
-  memset(esi, 0, num_sbn * sizeof(uint32_t));
+    memset(esi, 0, num_sbn * sizeof(uint32_t));
 
-  printf("RaptorQ initialized: sbn (blocks) = %d  Packet_size: %lu\n", num_sbn, packet_size);
+    printf("RaptorQ initialized: sbn (blocks) = %d  Packet_size: %lu\n", num_sbn, packet_size);
 
-  for (int b = 0; b < num_sbn; b++)
-  {
-      nanorq_generate_symbols(rq, b, myio);
-  }
+    for (int b = 0; b < num_sbn; b++)
+    {
+        nanorq_generate_symbols(rq, b, myio);
+    }
 
-  memset(configuration_packet, 0, CONFIG_PACKET_SIZE);
+    memset(configuration_packet, 0, CONFIG_PACKET_SIZE);
 
-  nanorq_oti_common_reduced(rq, configuration_packet+1); // 5 bytes
-  nanorq_oti_scheme_specific_align1(rq, configuration_packet+6); // 3 bytes
+    nanorq_oti_common_reduced(rq, configuration_packet+1); // 5 bytes
+    nanorq_oti_scheme_specific_align1(rq, configuration_packet+6); // 3 bytes
 
-  configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
-  configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
+    configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
+    configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
 
-  cbuf_handle_t buffer;
+    cbuf_handle_t buffer;
 
-  buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
+    buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
 
-  while(running)
-  //
-  {
-      // 1 configuration packet per each sbn "slice"
-      write_configuration_packet(mercury_frame_size[mod_mode], buffer);
+    while(running)
+    {
+        // 1 configuration packet per each sbn "slice"
+        write_configuration_packet(mercury_frame_size[mod_mode], buffer);
 
-      if (write_interleaved_block_packets(rq, myio, esi, buffer) == false)
-          goto finish;
-  }
+        if (write_interleaved_block_packets(rq, myio, esi, buffer) == false)
+            goto finish;
+    }
 
 finish:
-  nanorq_free(rq);
-  myio->destroy(myio);
+    nanorq_free(rq);
+    myio->destroy(myio);
 
-  circular_buf_free_shm(buffer);
+    circular_buf_free_shm(buffer);
 
-  return 0;
+    return 0;
 }
