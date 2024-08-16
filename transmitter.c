@@ -30,7 +30,7 @@ uint8_t configuration_packet[CONFIG_PACKET_SIZE];
 
 void exit_system(int sig)
 {
-    printf("Exiting... ");
+    printf("\nExiting... ");
     running = false;
 }
 
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
             running = false;
     }
 
-    printf("shutdown.\n");
+    printf("\nshutdown.\n");
     printf("\e[?25h"); // re-enable cursor
 
     nanorq_free(rq);
