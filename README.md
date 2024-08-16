@@ -2,7 +2,7 @@
 
 High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for broadcasting data through HF.
 
-Use Mercury modem in MODE_SHM. Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ).
+Use Mercury modem in MODE_SHM. Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ implementation: https://github.com/sleepybishop/nanorq/).
 
 # Compilation
 
