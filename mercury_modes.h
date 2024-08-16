@@ -19,5 +19,5 @@
 
 #define MODE_MAX 16 // 0 to 16, size 17
 
-// frame sizesno CRC enabled, modes 0 to 16.
+// frame sizes, no CRC enabled, modes 0 to 16.
 uint32_t mercury_frame_size[17] = { 12, 25, 37, 50, 62, 75, 100, 62, 75, 100, 74, 99, 175, 100, 174, 175, 162};
