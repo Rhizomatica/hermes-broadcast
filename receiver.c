@@ -161,7 +161,7 @@ try_again:
     {
         if (size_buffer(buffer) < frame_size)
         {
-            usleep(1500000); // 1.5s
+            usleep(500000); // 0.5s
             continue;
         }
         read_buffer(buffer, data_frame, frame_size);
