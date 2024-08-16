@@ -7,8 +7,6 @@
  *
  */
 
-#define _DEFAULT_SOURCE
-
 #include "shm_posix.h"
 
 #include <stdio.h>

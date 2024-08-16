@@ -45,8 +45,10 @@ receiver.o: receiver.c
 transmitter.o: transmitter.c
 
 receiver: receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
+	$(CC) receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a -o receiver $(LDFLAGS)
 
 transmitter: transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
+	$(CC) transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a -o transmitter $(LDFLAGS)
 
 oblas/liboblas.a:
 	$(MAKE) -C oblas CPPFLAGS+=$(OBLAS_CPPFLAGS)
