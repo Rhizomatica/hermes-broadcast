@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 #ifdef ENABLE_LOOP
 try_again:
 #endif
-
+    printf("\e[?25l"); // hide cursor
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
     while (running)
     {
@@ -278,7 +278,7 @@ try_again:
 success:
 
     printf("shutdown.\n");
-
+    printf("\e[?25h"); // re-enable cursor
     nanorq_free(rq);
 
 //enable loop

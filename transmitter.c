@@ -189,12 +189,12 @@ int main(int argc, char *argv[]) {
         write_configuration_packet(mercury_frame_size[mod_mode], buffer);
 
         if (write_interleaved_block_packets(rq, myio, esi, buffer) == false)
-            goto finish;
+            running = false;
     }
 
     printf("shutdown.\n");
+    printf("\e[?25h"); // re-enable cursor
 
-finish:
     nanorq_free(rq);
     myio->destroy(myio);
 
