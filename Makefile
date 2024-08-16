@@ -9,9 +9,9 @@ uname_p := $(shell uname -m)
 CC=gcc
 
 CPPFLAGS = -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64
-CFLAGS   = -O3 -g -std=c99 -Wall -I. -Iraptorq -Ioblas
+CFLAGS   = -O3 -g -std=c99 -Wall -I. -Iraptorq -Ioblas -pthread
 CFLAGS  += -funroll-loops -ftree-vectorize -fno-inline -fstack-protector-all
-
+LDFLAGS = -lpthread -lrt
 
 ifeq (${uname_p},aarch64)
 	OBLAS_CPPFLAGS="-DOBLAS_NEON"
