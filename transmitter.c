@@ -71,7 +71,7 @@ bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
     int num_sbn = nanorq_blocks(rq);
 
     // for all blocks TODO: shuffle the sbn traversal each call
-    for (int sbn = 0; sbn < num_sbn; sbn++)
+    for (int sbn = 0; sbn < num_sbn && running; sbn++)
     {
         write_esi(rq, myio, sbn, esi[sbn], buffer);
         esi[sbn]++;
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
     memset(esi, 0, num_sbn * sizeof(uint32_t));
 
     printf("\e[?25l"); // hide cursor
-    printf("RaptorQ initialized: sbn (blocks) = %d  Packet_size: %lu\n", num_sbn, packet_size);
+    printf("RaptorQ init: Blocks: %d  Packet_size: %lu\n", num_sbn, packet_size);
 
     for (int b = 0; b < num_sbn; b++)
     {
