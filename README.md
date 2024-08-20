@@ -6,7 +6,7 @@ Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ implemen
 
 # Compilation
 
-For compiling a C99 C compiler is needed. GCC is the compiler set in Makefile - edit it to your needs. 
+Code is implemented in C99 C language and needs a compliant POSIX implementation. GCC is the compiler set in Makefile - edit it to your own needs.
 
 For compiling, type:
 
