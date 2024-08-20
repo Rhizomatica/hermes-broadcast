@@ -1,0 +1,1 @@
+- Keep payload packets which arrives before configuration packet.
