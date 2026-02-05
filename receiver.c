@@ -12,10 +12,13 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
+#include <getopt.h>
+#include <string.h>
 
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
 #include "crc6.h"
+#include "tcp_interface.h"
 
 // #define ENABLE_LOOP // for debug purposes...
 
@@ -29,6 +32,15 @@
 bool block_decoded[MAX_BLOCKS];
 
 bool running;
+
+// Input mode
+typedef enum {
+    INPUT_SHM,
+    INPUT_TCP
+} input_mode_t;
+
+// Global TCP interface (used when INPUT_TCP mode)
+tcp_interface_t tcp_iface;
 
 void exit_system(int sig)
 {
@@ -96,15 +108,111 @@ uint32_t parse_tag_oti_scheme(uint8_t *packet)
     return oti_scheme;
 }
 
+void print_usage(const char *prog_name)
+{
+    printf("Usage: %s [options] file_to_receive mercury_modulation_mode\n", prog_name);
+    printf("\nOptions:\n");
+    printf("  -t, --tcp         Use TCP input from hermes-modem (default: shared memory)\n");
+    printf("  -i, --ip IP       IP address of hermes-modem (default: %s)\n", DEFAULT_MODEM_IP);
+    printf("  -p, --port PORT   TCP port of hermes-modem (default: %d)\n", DEFAULT_MODEM_PORT);
+    printf("  -h, --help        Show this help message\n");
+    printf("\nmercury_modulation_mode ranges from 0 to 16 (inclusive)\n");
+}
+
+// Read a frame from input (SHM or TCP)
+// Returns 1 on success, 0 if no data available, -1 on error
+int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *data_frame, uint32_t frame_size)
+{
+    if (in_mode == INPUT_SHM)
+    {
+        if (size_buffer(buffer) < frame_size)
+        {
+            return 0; // No data available
+        }
+        read_buffer(buffer, data_frame, frame_size);
+        return 1;
+    }
+    else // INPUT_TCP
+    {
+        // For TCP, we receive KISS-framed data
+        int frame_len = tcp_interface_recv_kiss(&tcp_iface, data_frame);
+        if (frame_len > 0)
+        {
+            // Validate frame size
+            if ((uint32_t)frame_len >= frame_size)
+            {
+                return 1;
+            }
+            // Frame too small, might be config packet
+            if ((uint32_t)frame_len >= CONFIG_PACKET_SIZE)
+            {
+                // Check if it's a config packet
+                uint8_t packet_type = (data_frame[0] >> 6) & 0x3;
+                if (packet_type == PACKET_RQ_CONFIG)
+                {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        else if (frame_len == 0)
+        {
+            return 0; // No complete frame yet
+        }
+        else
+        {
+            return -1; // Error or disconnected
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
-    if (argc < 3)
+    input_mode_t in_mode = INPUT_SHM;
+    char *tcp_ip = DEFAULT_MODEM_IP;
+    int tcp_port = DEFAULT_MODEM_PORT;
+
+    static struct option long_options[] = {
+        {"tcp",  no_argument,       0, 't'},
+        {"ip",   required_argument, 0, 'i'},
+        {"port", required_argument, 0, 'p'},
+        {"help", no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int option_index = 0;
+    while ((opt = getopt_long(argc, argv, "ti:p:h", long_options, &option_index)) != -1)
     {
-        printf("Usage: %s file_to_receive mercury_modulation_mode\n", argv[0]);
+        switch (opt)
+        {
+        case 't':
+            in_mode = INPUT_TCP;
+            break;
+        case 'i':
+            tcp_ip = optarg;
+            break;
+        case 'p':
+            tcp_port = atoi(optarg);
+            break;
+        case 'h':
+            print_usage(argv[0]);
+            return 0;
+        default:
+            print_usage(argv[0]);
+            return -1;
+        }
+    }
+
+    if (argc - optind < 2)
+    {
+        print_usage(argv[0]);
         return -1;
     }
 
-    char *outfile = argv[1];
+    char *outfile = argv[optind];
+    int mod_mode = strtol(argv[optind + 1], NULL, 10);
+
     struct ioctx *myio = ioctx_from_file(outfile, 0);
 
     if (!myio) {
@@ -112,7 +220,6 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int mod_mode = strtol(argv[2], NULL, 10);
     uint32_t frame_size = 0;
 
     if ((mod_mode <= 16) && (mod_mode >= 0))
@@ -144,12 +251,30 @@ int main(int argc, char *argv[])
     int dups = 0;
 
     nanorq *rq = NULL;
-    cbuf_handle_t buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
+    cbuf_handle_t buffer = NULL;
 
-    if (buffer == NULL)
+    // Initialize input interface
+    if (in_mode == INPUT_TCP)
     {
-        fprintf(stderr, "Shared memory not created\n");
-        return 0;
+        tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
+        if (!tcp_interface_connect(&tcp_iface))
+        {
+            fprintf(stderr, "Failed to connect to hermes-modem at %s:%d\n", tcp_ip, tcp_port);
+            myio->destroy(myio);
+            return -1;
+        }
+        printf("Input mode: TCP from hermes-modem (%s:%d)\n", tcp_ip, tcp_port);
+    }
+    else
+    {
+        buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
+        if (buffer == NULL)
+        {
+            fprintf(stderr, "Shared memory not created\n");
+            myio->destroy(myio);
+            return -1;
+        }
+        printf("Input mode: Shared memory\n");
     }
 
 #ifdef ENABLE_LOOP
@@ -159,12 +284,17 @@ try_again:
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
     while (running)
     {
-        if (size_buffer(buffer) < frame_size)
+        int read_result = read_frame_from_input(in_mode, buffer, data_frame, frame_size);
+        if (read_result == 0)
         {
-            usleep(500000); // 0.5s
+            usleep(100000); // 0.1s - shorter for TCP mode
             continue;
         }
-        read_buffer(buffer, data_frame, frame_size);
+        else if (read_result < 0)
+        {
+            fprintf(stderr, "Error reading from input\n");
+            break;
+        }
 
         int8_t packet_type = parse_frame_header(data_frame, frame_size);
         if (packet_type < 0)
@@ -209,7 +339,8 @@ try_again:
                (oti_scheme_local != oti_scheme))
             {
                 printf("Need to reset the system to new file. TODO!\n");
-                return (-1);
+                running = false;
+                break;
             }
             continue;
         }
@@ -279,7 +410,8 @@ success:
 
     printf("shutdown.\n");
     printf("\e[?25h"); // re-enable cursor
-    nanorq_free(rq);
+    if (rq)
+        nanorq_free(rq);
 
 //enable loop
 #ifdef ENABLE_LOOP
@@ -288,7 +420,14 @@ success:
 #endif
     myio->destroy(myio);
 
-    circular_buf_free_shm(buffer);
+    if (in_mode == INPUT_TCP)
+    {
+        tcp_interface_disconnect(&tcp_iface);
+    }
+    else
+    {
+        circular_buf_free_shm(buffer);
+    }
 
     return 0;
 }

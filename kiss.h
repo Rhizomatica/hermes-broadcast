@@ -29,8 +29,22 @@ extern "C" {
 
 #define MAX_PAYLOAD 756 // ~ 18 frames at VARA Level 4
 
-void kiss_read(uint8_t sbyte);
-int kiss_write_frame(uint8_t* buffer, int frame_len);
+// KISS state structure for reentrant/thread-safe operation
+typedef struct {
+    int frame_len;
+    int in_frame;
+    int escape;
+    uint8_t kiss_command;
+} kiss_state_t;
+
+// Initialize KISS state
+void kiss_init(kiss_state_t *state);
+
+// Process a single byte, returns frame length when complete frame received, 0 otherwise
+int kiss_read(kiss_state_t *state, uint8_t sbyte, uint8_t *frame_buffer);
+
+// Write a KISS frame to write_buffer, returns the total length written
+int kiss_write_frame(uint8_t *buffer, int frame_len, uint8_t *write_buffer);
 
 
 #ifdef __cplusplus

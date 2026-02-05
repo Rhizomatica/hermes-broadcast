@@ -13,66 +13,60 @@
 #include <stdio.h>
 #include "kiss.h"
 
-int frame_len;
-bool IN_FRAME;
-bool ESCAPE;
-
-uint8_t kiss_command = CMD_UNKNOWN;
-uint8_t frame_buffer[MAX_PAYLOAD];
-uint8_t write_buffer[MAX_PAYLOAD*2+3];
-
-void kiss_frame_received(int frame_len)
+void kiss_init(kiss_state_t *state)
 {
-    // do something here...
-    int written = write(1, frame_buffer, frame_len);
+    state->frame_len = 0;
+    state->in_frame = 0;
+    state->escape = 0;
+    state->kiss_command = CMD_UNKNOWN;
 }
 
-void kiss_read(uint8_t sbyte)
+int kiss_read(kiss_state_t *state, uint8_t sbyte, uint8_t *frame_buffer)
 {
-    if (IN_FRAME && sbyte == FEND && kiss_command == CMD_DATA)
+    if (state->in_frame && sbyte == FEND && state->kiss_command == CMD_DATA)
     {
-        IN_FRAME = false;
-        kiss_frame_received(frame_len);
-        return;
+        state->in_frame = 0;
+        return state->frame_len;
     }
     if (sbyte == FEND)
     {
-        IN_FRAME = true;
-        kiss_command = CMD_UNKNOWN;
-        frame_len = 0;
-        return;
+        state->in_frame = 1;
+        state->kiss_command = CMD_UNKNOWN;
+        state->frame_len = 0;
+        return 0;
     }
-    if (IN_FRAME && frame_len < MAX_PAYLOAD)
+    if (state->in_frame && state->frame_len < MAX_PAYLOAD)
     {
         // Have a look at the command byte first
-        if (frame_len == 0 && kiss_command == CMD_UNKNOWN)
+        if (state->frame_len == 0 && state->kiss_command == CMD_UNKNOWN)
         {
             // Strip of port nibble
-            kiss_command = sbyte & 0x0F;
-            return;
+            state->kiss_command = sbyte & 0x0F;
+            return 0;
         }
-        if (kiss_command == CMD_DATA)
+        if (state->kiss_command == CMD_DATA)
         {
             if (sbyte == FESC)
             {
-                ESCAPE = true;
-                return;
+                state->escape = 1;
+                return 0;
             }
-            if (ESCAPE)
+            if (state->escape)
             {
                 if (sbyte == TFEND) sbyte = FEND;
                 if (sbyte == TFESC) sbyte = FESC;
-                ESCAPE = false;
+                state->escape = 0;
             }
-            if (frame_len < MAX_PAYLOAD)
+            if (state->frame_len < MAX_PAYLOAD)
             {
-                frame_buffer[frame_len++] = sbyte;
+                frame_buffer[state->frame_len++] = sbyte;
             }
         }
     }
+    return 0;
 }
 
-int kiss_write_frame(uint8_t* buffer, int frame_len)
+int kiss_write_frame(uint8_t *buffer, int frame_len, uint8_t *write_buffer)
 {
     int write_len = 0;
     write_buffer[write_len++] = FEND;
@@ -95,7 +89,5 @@ int kiss_write_frame(uint8_t* buffer, int frame_len)
         }
     }
     write_buffer[write_len++] = FEND;
-
-    // TODO: write the buffer somewhere...
-    return write(1, write_buffer, write_len);
+    return write_len;
 }

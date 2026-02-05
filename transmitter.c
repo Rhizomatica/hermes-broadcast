@@ -14,10 +14,12 @@
 #include <time.h>
 #include <signal.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
 #include "crc6.h"
+#include "tcp_interface.h"
 
 #include <nanorq.h>
 
@@ -28,6 +30,15 @@ bool running;
 
 uint8_t configuration_packet[CONFIG_PACKET_SIZE];
 
+// Output mode
+typedef enum {
+    OUTPUT_SHM,
+    OUTPUT_TCP
+} output_mode_t;
+
+// Global TCP interface (used when OUTPUT_TCP mode)
+tcp_interface_t tcp_iface;
+
 void exit_system(int sig)
 {
     printf("\nExiting... ");
@@ -35,7 +46,7 @@ void exit_system(int sig)
 }
 
 void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
-              uint32_t esi, cbuf_handle_t buffer)
+              uint32_t esi, cbuf_handle_t buffer, output_mode_t out_mode)
 {
     size_t packet_size = nanorq_symbol_size(rq);
     uint8_t data[packet_size + RQ_HEADER_SIZE];
@@ -57,7 +68,14 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
         data[0] = (PACKET_RQ_PAYLOAD << 6) & 0xff;
         data[0] |= crc6_0X6F(1, data+1, packet_size + TAG_SIZE);
 
-        write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
+        if (out_mode == OUTPUT_SHM)
+        {
+            write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
+        }
+        else // OUTPUT_TCP
+        {
+            tcp_interface_send_kiss(&tcp_iface, data, packet_size + RQ_HEADER_SIZE);
+        }
         fprintf(stdout, "\rBlock: %2d  Tx: %3d",  sbn, esi);
         fflush(stdout);
         // for (int i = 0; i < packet_size + RQ_HEADER_SIZE; i++)
@@ -66,14 +84,14 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
     }
 }
 
-bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi, cbuf_handle_t buffer)
+bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi, cbuf_handle_t buffer, output_mode_t out_mode)
 {
     int num_sbn = nanorq_blocks(rq);
 
     // for all blocks TODO: shuffle the sbn traversal each call
     for (int sbn = 0; sbn < num_sbn && running; sbn++)
     {
-        write_esi(rq, myio, sbn, esi[sbn], buffer);
+        write_esi(rq, myio, sbn, esi[sbn], buffer, out_mode);
         esi[sbn]++;
 //        if (esi[sbn] > ((1 << 24) - 1))
         if (esi[sbn] > ((1 << 16) - 1))
@@ -86,28 +104,88 @@ bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
     return true;
 }
 
-void write_configuration_packet(int packet_size, cbuf_handle_t buffer)
+void write_configuration_packet(int packet_size, cbuf_handle_t buffer, output_mode_t out_mode)
 {
     uint8_t data[packet_size + RQ_HEADER_SIZE];
 
     memset(data, 0, packet_size);
 
-    write_buffer(buffer, configuration_packet, CONFIG_PACKET_SIZE);
-    // stuffing bytes... could be used for something useful later on
-    if (packet_size > CONFIG_PACKET_SIZE)
-        write_buffer(buffer, data, packet_size - CONFIG_PACKET_SIZE);
+    if (out_mode == OUTPUT_SHM)
+    {
+        write_buffer(buffer, configuration_packet, CONFIG_PACKET_SIZE);
+        // stuffing bytes... could be used for something useful later on
+        if (packet_size > CONFIG_PACKET_SIZE)
+            write_buffer(buffer, data, packet_size - CONFIG_PACKET_SIZE);
+    }
+    else // OUTPUT_TCP
+    {
+        // For TCP, send full frame with stuffing
+        uint8_t full_packet[packet_size];
+        memset(full_packet, 0, packet_size);
+        memcpy(full_packet, configuration_packet, CONFIG_PACKET_SIZE);
+        tcp_interface_send_kiss(&tcp_iface, full_packet, packet_size);
+    }
 }
 
 
+void print_usage(const char *prog_name)
+{
+    printf("Usage: %s [options] file_to_transmit mercury_modulation_mode\n", prog_name);
+    printf("\nOptions:\n");
+    printf("  -t, --tcp         Use TCP output to hermes-modem (default: shared memory)\n");
+    printf("  -i, --ip IP       IP address of hermes-modem (default: %s)\n", DEFAULT_MODEM_IP);
+    printf("  -p, --port PORT   TCP port of hermes-modem (default: %d)\n", DEFAULT_MODEM_PORT);
+    printf("  -h, --help        Show this help message\n");
+    printf("\nmercury_modulation_mode ranges from 0 to 16 (inclusive)\n");
+}
+
 int main(int argc, char *argv[]) {
 
-    if (argc < 3)
+    output_mode_t out_mode = OUTPUT_SHM;
+    char *tcp_ip = DEFAULT_MODEM_IP;
+    int tcp_port = DEFAULT_MODEM_PORT;
+
+    static struct option long_options[] = {
+        {"tcp",  no_argument,       0, 't'},
+        {"ip",   required_argument, 0, 'i'},
+        {"port", required_argument, 0, 'p'},
+        {"help", no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    int option_index = 0;
+    while ((opt = getopt_long(argc, argv, "ti:p:h", long_options, &option_index)) != -1)
     {
-        printf("Usage: %s file_to_transmit mercury_modulation_mode\n", argv[0]);
-        printf("mercury_modulation_mode ranges from 0 to 16 (inclusive)\n");
+        switch (opt)
+        {
+        case 't':
+            out_mode = OUTPUT_TCP;
+            break;
+        case 'i':
+            tcp_ip = optarg;
+            break;
+        case 'p':
+            tcp_port = atoi(optarg);
+            break;
+        case 'h':
+            print_usage(argv[0]);
+            return 0;
+        default:
+            print_usage(argv[0]);
+            return -1;
+        }
+    }
+
+    if (argc - optind < 2)
+    {
+        print_usage(argv[0]);
         return -1;
     }
-    char *infile = argv[1];
+
+    char *infile = argv[optind];
+    int mod_mode = strtol(argv[optind + 1], NULL, 10);
+
     struct ioctx *myio = ioctx_from_file(infile, 1);
     if (!myio)
     {
@@ -124,7 +202,6 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    int mod_mode = strtol(argv[2], NULL, 10);
     size_t packet_size = 0;
 
     // determine chunks, symbol size, memory usage from size
@@ -180,16 +257,40 @@ int main(int argc, char *argv[]) {
     configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
     configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
 
-    cbuf_handle_t buffer;
+    cbuf_handle_t buffer = NULL;
 
-    buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
+    // Initialize output interface
+    if (out_mode == OUTPUT_TCP)
+    {
+        tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
+        if (!tcp_interface_connect(&tcp_iface))
+        {
+            fprintf(stderr, "Failed to connect to hermes-modem at %s:%d\n", tcp_ip, tcp_port);
+            nanorq_free(rq);
+            myio->destroy(myio);
+            return -1;
+        }
+        printf("Output mode: TCP to hermes-modem (%s:%d)\n", tcp_ip, tcp_port);
+    }
+    else
+    {
+        buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
+        if (buffer == NULL)
+        {
+            fprintf(stderr, "Failed to connect to shared memory\n");
+            nanorq_free(rq);
+            myio->destroy(myio);
+            return -1;
+        }
+        printf("Output mode: Shared memory\n");
+    }
 
     while(running)
     {
         // 1 configuration packet per each sbn "slice"
-        write_configuration_packet(mercury_frame_size[mod_mode], buffer);
+        write_configuration_packet(mercury_frame_size[mod_mode], buffer, out_mode);
 
-        if (write_interleaved_block_packets(rq, myio, esi, buffer) == false)
+        if (write_interleaved_block_packets(rq, myio, esi, buffer, out_mode) == false)
             running = false;
     }
 
@@ -199,7 +300,14 @@ int main(int argc, char *argv[]) {
     nanorq_free(rq);
     myio->destroy(myio);
 
-    circular_buf_free_shm(buffer);
+    if (out_mode == OUTPUT_TCP)
+    {
+        tcp_interface_disconnect(&tcp_iface);
+    }
+    else
+    {
+        circular_buf_free_shm(buffer);
+    }
 
     return 0;
 }

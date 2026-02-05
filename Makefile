@@ -38,17 +38,24 @@ raptorq/tuple.o\
 raptorq/wrkmat.o\
 raptorq/nanorq.o
 
+# Common objects for TCP/KISS support
+COMMON_OBJ = shm_posix.o ring_buffer_posix.o crc6.o kiss.o tcp_interface.o
+
 all: transmitter receiver raptorq/libnanorq.a
 
-receiver.o: receiver.c
+receiver.o: receiver.c tcp_interface.h kiss.h
 
-transmitter.o: transmitter.c
+transmitter.o: transmitter.c tcp_interface.h kiss.h
 
-receiver: receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
-	$(CC) receiver.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a -o receiver $(LDFLAGS)
+kiss.o: kiss.c kiss.h
 
-transmitter: transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a
-	$(CC) transmitter.o shm_posix.o ring_buffer_posix.o crc6.o raptorq/libnanorq.a -o transmitter $(LDFLAGS)
+tcp_interface.o: tcp_interface.c tcp_interface.h kiss.h
+
+receiver: receiver.o $(COMMON_OBJ) raptorq/libnanorq.a
+	$(CC) receiver.o $(COMMON_OBJ) raptorq/libnanorq.a -o receiver $(LDFLAGS)
+
+transmitter: transmitter.o $(COMMON_OBJ) raptorq/libnanorq.a
+	$(CC) transmitter.o $(COMMON_OBJ) raptorq/libnanorq.a -o transmitter $(LDFLAGS)
 
 oblas/liboblas.a:
 	$(MAKE) -C oblas CPPFLAGS+=$(OBLAS_CPPFLAGS)
