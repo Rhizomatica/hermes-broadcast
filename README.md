@@ -20,11 +20,11 @@ Two binaries will be created: "transmitter" and "receiver".
 
 ## Shared Memory Mode (Mercury modem)
 
-Use Mercury modem in operating mode TX_SHM for the transmitter and RX_SHM for the receiver. The arguments of both software is a file (to transmit or receive) and Mercury's modulation mode (0 to 16).
+Use Mercury modem in operating mode TX_SHM for the transmitter and RX_SHM for the receiver. The arguments of both programs are a file (to transmit or receive) and the modulation mode (0 to 16).
 
 ```
-$ ./transmitter file_to_transmit mercury_modulation_mode
-$ ./receiver file_to_receive mercury_modulation_mode
+$ ./transmitter file_to_transmit 10
+$ ./receiver file_to_receive 10
 ```
 
 ## TCP Mode (hermes-modem)
@@ -34,15 +34,15 @@ For use with hermes-modem, enable TCP mode with the `-t` flag. Data is sent/rece
 ### Transmitter
 
 ```
-$ ./transmitter -t file_to_transmit mercury_modulation_mode
-$ ./transmitter -t -i 192.168.1.100 -p 8100 file_to_transmit mercury_modulation_mode
+$ ./transmitter -t file_to_transmit 0
+$ ./transmitter -t -i 192.168.1.100 -p 8100 file_to_transmit 1
 ```
 
 ### Receiver
 
 ```
-$ ./receiver -t file_to_receive mercury_modulation_mode
-$ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive mercury_modulation_mode
+$ ./receiver -t file_to_receive 0
+$ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive 1
 ```
 
 ### Command Line Options
@@ -54,9 +54,25 @@ $ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive mercury_modulation_mode
   -h, --help        Show help message
 ```
 
-## Mercury Modulation Modes
+## Modulation Modes
 
-Valid modulation modes range from 0 to 16 (inclusive). Each mode corresponds to a specific frame size optimized for different channel conditions.
+### Mercury Modem (Shared Memory Mode)
+
+Valid modulation modes range from 0 to 16 (inclusive).
+
+### hermes-modem (TCP Mode)
+
+Valid modulation modes range from 0 to 6:
+
+| Mode | Codec    | Payload Bytes |
+|------|----------|---------------|
+| 0    | DATAC1   | 510           |
+| 1    | DATAC3   | 126           |
+| 2    | DATAC0   | 14            |
+| 3    | DATAC4   | 54            |
+| 4    | DATAC13  | 14            |
+| 5    | DATAC14  | 3             |
+| 6    | FSK_LDPC | 30            |
 
 # Architecture
 

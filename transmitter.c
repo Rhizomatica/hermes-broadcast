@@ -130,13 +130,22 @@ void write_configuration_packet(int packet_size, cbuf_handle_t buffer, output_mo
 
 void print_usage(const char *prog_name)
 {
-    printf("Usage: %s [options] file_to_transmit mercury_modulation_mode\n", prog_name);
+    printf("Usage: %s [options] file_to_transmit modulation_mode\n", prog_name);
     printf("\nOptions:\n");
     printf("  -t, --tcp         Use TCP output to hermes-modem (default: shared memory)\n");
     printf("  -i, --ip IP       IP address of hermes-modem (default: %s)\n", DEFAULT_MODEM_IP);
     printf("  -p, --port PORT   TCP port of hermes-modem (default: %d)\n", DEFAULT_MODEM_PORT);
     printf("  -h, --help        Show this help message\n");
-    printf("\nmercury_modulation_mode ranges from 0 to 16 (inclusive)\n");
+    printf("\nModulation modes:\n");
+    printf("  Shared memory (Mercury): 0-16\n");
+    printf("  TCP (hermes-modem):      0-6\n");
+    printf("    Mode 0: DATAC1  (510 bytes)\n");
+    printf("    Mode 1: DATAC3  (126 bytes)\n");
+    printf("    Mode 2: DATAC0  (14 bytes)\n");
+    printf("    Mode 3: DATAC4  (54 bytes)\n");
+    printf("    Mode 4: DATAC13 (14 bytes)\n");
+    printf("    Mode 5: DATAC14 (3 bytes)\n");
+    printf("    Mode 6: FSK_LDPC (30 bytes)\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -186,6 +195,17 @@ int main(int argc, char *argv[]) {
     char *infile = argv[optind];
     int mod_mode = strtol(argv[optind + 1], NULL, 10);
 
+    // Validate mode based on output type
+    int max_mode = (out_mode == OUTPUT_TCP) ? HERMES_MODE_MAX : MERCURY_MODE_MAX;
+    uint32_t *frame_sizes = (out_mode == OUTPUT_TCP) ? hermes_frame_size : mercury_frame_size;
+
+    if (mod_mode < 0 || mod_mode > max_mode)
+    {
+        printf("Invalid mode %d. Valid modes range from 0 to %d for %s.\n",
+               mod_mode, max_mode, (out_mode == OUTPUT_TCP) ? "TCP/hermes-modem" : "SHM/Mercury");
+        return -1;
+    }
+
     struct ioctx *myio = ioctx_from_file(infile, 1);
     if (!myio)
     {
@@ -202,18 +222,10 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    size_t packet_size = 0;
+    uint32_t frame_size = frame_sizes[mod_mode];
+    size_t packet_size = frame_size - (uint32_t) RQ_HEADER_SIZE; // T
 
-    // determine chunks, symbol size, memory usage from size
-    if (mod_mode <= 16)
-    {
-        packet_size = mercury_frame_size[mod_mode] - (uint32_t) RQ_HEADER_SIZE; // T
-    }
-    else
-    {
-        printf("Invalid mode. Valid modes range from 0 to 16 (inclusive).\n");
-        exit(-1);
-    }
+    printf("Mode: %d, Frame size: %u bytes, Packet size: %zu bytes\n", mod_mode, frame_size, packet_size);
 
     running = true;
     signal(SIGQUIT, exit_system);
@@ -288,7 +300,7 @@ int main(int argc, char *argv[]) {
     while(running)
     {
         // 1 configuration packet per each sbn "slice"
-        write_configuration_packet(mercury_frame_size[mod_mode], buffer, out_mode);
+        write_configuration_packet(frame_size, buffer, out_mode);
 
         if (write_interleaved_block_packets(rq, myio, esi, buffer, out_mode) == false)
             running = false;
