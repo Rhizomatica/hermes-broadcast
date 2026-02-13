@@ -41,11 +41,13 @@ raptorq/nanorq.o
 # Common objects for TCP/KISS support
 COMMON_OBJ = shm_posix.o ring_buffer_posix.o crc6.o kiss.o tcp_interface.o
 
-all: transmitter receiver raptorq/libnanorq.a
+all: transmitter receiver broadcast_daemon raptorq/libnanorq.a
 
 receiver.o: receiver.c tcp_interface.h kiss.h
 
 transmitter.o: transmitter.c tcp_interface.h kiss.h
+
+daemon.o: daemon.c tcp_interface.h kiss.h mercury_modes.h
 
 kiss.o: kiss.c kiss.h
 
@@ -57,6 +59,9 @@ receiver: receiver.o $(COMMON_OBJ) raptorq/libnanorq.a
 transmitter: transmitter.o $(COMMON_OBJ) raptorq/libnanorq.a
 	$(CC) transmitter.o $(COMMON_OBJ) raptorq/libnanorq.a -o transmitter $(LDFLAGS)
 
+broadcast_daemon: daemon.o $(COMMON_OBJ) raptorq/libnanorq.a
+	$(CC) daemon.o $(COMMON_OBJ) raptorq/libnanorq.a -o broadcast_daemon $(LDFLAGS)
+
 oblas/liboblas.a:
 	$(MAKE) -C oblas CPPFLAGS+=$(OBLAS_CPPFLAGS)
 
@@ -67,5 +72,5 @@ raptorq/libnanorq.a: $(OBJ) oblas/liboblas.a
 .PHONY: clean
 
 clean:
-	$(RM) transmitter receiver raptorq/*.o raptorq/*.a *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old
+	$(RM) transmitter receiver broadcast_daemon raptorq/*.o raptorq/*.a *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old
 	$(MAKE) -C oblas clean
