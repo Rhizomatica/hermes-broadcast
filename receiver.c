@@ -19,6 +19,7 @@
 #include "mercury_modes.h"
 #include "crc6.h"
 #include "tcp_interface.h"
+#include "kiss.h"
 
 // #define ENABLE_LOOP // for debug purposes...
 
@@ -70,7 +71,8 @@ int8_t parse_frame_header(uint8_t *data_frame, uint32_t frame_size)
 
     if (crc6_local != crc6_calc)
     {
-        printf("CRC does not match!\n");
+        printf("CRC does not match! type=0x%02x frame_size=%u local=0x%02x calc=0x%02x\n",
+               packet_type, frame_size, crc6_local, crc6_calc);
         return -1;
     }
     return packet_type;
@@ -130,8 +132,11 @@ void print_usage(const char *prog_name)
 
 // Read a frame from input (SHM or TCP)
 // Returns 1 on success, 0 if no data available, -1 on error
-int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *data_frame, uint32_t frame_size)
+int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *data_frame, uint32_t frame_size, uint32_t *rx_frame_len)
 {
+    if (rx_frame_len)
+        *rx_frame_len = 0;
+
     if (in_mode == INPUT_SHM)
     {
         if (size_buffer(buffer) < frame_size)
@@ -139,6 +144,8 @@ int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *d
             return 0; // No data available
         }
         read_buffer(buffer, data_frame, frame_size);
+        if (rx_frame_len)
+            *rx_frame_len = frame_size;
         return 1;
     }
     else // INPUT_TCP
@@ -148,20 +155,14 @@ int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *d
         if (frame_len > 0)
         {
             // Validate frame size
-            if ((uint32_t)frame_len >= frame_size)
+            if ((uint32_t)frame_len == frame_size)
             {
+                if (rx_frame_len)
+                    *rx_frame_len = (uint32_t)frame_len;
                 return 1;
             }
-            // Frame too small, might be config packet
-            if ((uint32_t)frame_len >= CONFIG_PACKET_SIZE)
-            {
-                // Check if it's a config packet
-                uint8_t packet_type = (data_frame[0] >> 6) & 0x3;
-                if (packet_type == PACKET_RQ_CONFIG)
-                {
-                    return 1;
-                }
-            }
+            fprintf(stderr, "Discarding unexpected TCP frame length %d (expected %u)\n",
+                    frame_len, frame_size);
             return 0;
         }
         else if (frame_len == 0)
@@ -251,7 +252,8 @@ int main(int argc, char *argv[])
 
     bool configuration_received = false;
 
-    uint8_t data_frame[frame_size];
+    uint8_t data_frame[MAX_PAYLOAD];
+    uint32_t rx_frame_len = 0;
     uint32_t oti_scheme = 0;
     uint64_t oti_common = 0;
     int num_sbn = 0;
@@ -262,7 +264,6 @@ int main(int argc, char *argv[])
     memset(block_decoded, 0, MAX_BLOCKS * sizeof(bool));
 
     bool have_more_symbols = false;
-    int dups = 0;
 
     nanorq *rq = NULL;
     cbuf_handle_t buffer = NULL;
@@ -296,9 +297,19 @@ try_again:
 #endif
     printf("\e[?25l"); // hide cursor
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
+    uint64_t total_frames = 0;
+    uint64_t crc_errors = 0;
+    uint64_t config_packets = 0;
+    uint64_t payload_packets = 0;
+    uint64_t symbols_added = 0;
+    uint64_t symbols_dup = 0;
+    uint64_t symbols_err = 0;
+    uint64_t size_mismatch_packets = 0;
+    uint64_t decoded_blocks = 0;
+    uint64_t payload_before_config = 0;
     while (running)
     {
-        int read_result = read_frame_from_input(in_mode, buffer, data_frame, frame_size);
+        int read_result = read_frame_from_input(in_mode, buffer, data_frame, frame_size, &rx_frame_len);
         if (read_result == 0)
         {
             usleep(100000); // 0.1s - shorter for TCP mode
@@ -310,15 +321,23 @@ try_again:
             break;
         }
 
-        int8_t packet_type = parse_frame_header(data_frame, frame_size);
+        total_frames++;
+        if (rx_frame_len != frame_size && rx_frame_len >= CONFIG_PACKET_SIZE)
+            size_mismatch_packets++;
+
+        int8_t packet_type = parse_frame_header(data_frame, rx_frame_len);
         if (packet_type < 0)
+        {
+            crc_errors++;
             continue; // bad crc
+        }
 
         printf("\x1b[2K\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config.":"unknown", spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 
         if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
         {
+            config_packets++;
             oti_common = parse_tag_oti_common(data_frame);
             oti_scheme = parse_tag_oti_scheme(data_frame);
 
@@ -345,6 +364,7 @@ try_again:
 
         if (configuration_received == true && packet_type == PACKET_RQ_CONFIG)
         {
+            config_packets++;
             uint64_t oti_common_local = parse_tag_oti_common(data_frame);
             uint32_t oti_scheme_local = parse_tag_oti_scheme(data_frame);
 
@@ -361,6 +381,7 @@ try_again:
         if ((configuration_received == true) &&
             packet_type == PACKET_RQ_PAYLOAD)
         {
+            payload_packets++;
             // for (int i = 0; i < frame_size; i++)
             //    printf("%02x ", data_frame[i]);
             // printf("\n");
@@ -373,18 +394,20 @@ try_again:
             int ret = nanorq_decoder_add_symbol(rq, (void *)data_frame + RQ_HEADER_SIZE, tag, myio);
             if (NANORQ_SYM_ERR == ret)
             {
+                symbols_err++;
                 fprintf(stdout, "adding symbol %d failed. Contining...\n", tag);
                 continue;
             }
 
             if (ret == NANORQ_SYM_ADDED)
             {
+                symbols_added++;
                 esi[sbn]++;
                 have_more_symbols = true;
             }
             else if (ret == NANORQ_SYM_DUP)
             {
-                dups++;
+                symbols_dup++;
                 have_more_symbols = false;
             }
 
@@ -401,7 +424,11 @@ try_again:
                 else
                 {
                     fprintf(stdout, "\x1b[2K\rDECODE OF BLOCK %d SUCCESSFUL!", sbn);
-                    block_decoded[sbn] = true;
+                    if (!block_decoded[sbn])
+                    {
+                        block_decoded[sbn] = true;
+                        decoded_blocks++;
+                    }
                 }
             }
             // write_configuration_packets(buffer);
@@ -418,6 +445,37 @@ try_again:
                 goto success;
             }
             have_more_symbols = false;
+        }
+
+        if (!configuration_received && packet_type == PACKET_RQ_PAYLOAD)
+        {
+            payload_before_config++;
+            if (payload_before_config <= 10 || (payload_before_config % 20) == 0)
+            {
+                fprintf(stderr,
+                        "\n[DBG RX] payload before config: %llu (total=%llu)\n",
+                        (unsigned long long)payload_before_config,
+                        (unsigned long long)total_frames);
+            }
+        }
+
+        if ((total_frames % 50) == 0)
+        {
+            fprintf(stderr,
+                    "\n[DBG RX] total=%llu cfg=%llu payload=%llu crc_err=%llu sym_added=%llu sym_dup=%llu sym_err=%llu decoded=%llu/%d len=%u mismatch=%llu pre_cfg_payload=%llu\n",
+                    (unsigned long long)total_frames,
+                    (unsigned long long)config_packets,
+                    (unsigned long long)payload_packets,
+                    (unsigned long long)crc_errors,
+                    (unsigned long long)symbols_added,
+                    (unsigned long long)symbols_dup,
+                    (unsigned long long)symbols_err,
+                    (unsigned long long)decoded_blocks,
+                    num_sbn,
+                    rx_frame_len,
+                    (unsigned long long)size_mismatch_packets,
+                    (unsigned long long)payload_before_config);
+            fflush(stderr);
         }
     }
 success:

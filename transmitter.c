@@ -38,6 +38,8 @@ typedef enum {
 
 // Global TCP interface (used when OUTPUT_TCP mode)
 tcp_interface_t tcp_iface;
+static uint64_t tx_config_packets = 0;
+static uint64_t tx_payload_packets = 0;
 
 void exit_system(int sig)
 {
@@ -75,6 +77,13 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
         else // OUTPUT_TCP
         {
             tcp_interface_send_kiss(&tcp_iface, data, packet_size + RQ_HEADER_SIZE);
+        }
+        tx_payload_packets++;
+        if ((tx_payload_packets % 100) == 0)
+        {
+            fprintf(stderr, "\n[DBG TX] payload_sent=%llu config_sent=%llu\n",
+                    (unsigned long long)tx_payload_packets,
+                    (unsigned long long)tx_config_packets);
         }
         fprintf(stdout, "\rBlock: %2d  Tx: %3d",  sbn, esi);
         fflush(stdout);
@@ -124,6 +133,12 @@ void write_configuration_packet(int packet_size, cbuf_handle_t buffer, output_mo
         memset(full_packet, 0, packet_size);
         memcpy(full_packet, configuration_packet, CONFIG_PACKET_SIZE);
         tcp_interface_send_kiss(&tcp_iface, full_packet, packet_size);
+    }
+    tx_config_packets++;
+    if (tx_config_packets <= 10 || (tx_config_packets % 50) == 0)
+    {
+        fprintf(stderr, "\n[DBG TX] sent config packet #%llu (size=%d)\n",
+                (unsigned long long)tx_config_packets, packet_size);
     }
 }
 
