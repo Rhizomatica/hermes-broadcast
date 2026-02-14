@@ -14,7 +14,7 @@ For compiling, type:
 $ make
 ```
 
-Two binaries will be created: "transmitter" and "receiver".
+Three binaries will be created: "transmitter", "receiver", and "broadcast_daemon".
 
 # Usage
 
@@ -53,6 +53,34 @@ $ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive 1
   -p, --port PORT   TCP port of hermes-modem (default: 8100)
   -h, --help        Show help message
 ```
+
+## Broadcast daemon (joint RaptorQ configuration and payload protocol)
+
+`broadcast_daemon` runs TX and RX together over one TCP/KISS connection. It uses packet type `0x02` for data frames where old config-body + payload-body are carried together in each frame (single outer Hermes header), and reserves `0x03` for side information.
+
+### Daemon usage
+
+```
+$ ./broadcast_daemon --mode 0 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 8100
+```
+
+Options:
+
+```
+  -m, --mode MODE      hermes-modem mode (0..6)
+  -t, --tx-dir DIR     directory watched for files to transmit
+  -r, --rx-dir DIR     directory where received files are written
+  -i, --ip IP          hermes-modem IP (default 127.0.0.1)
+  -p, --port PORT      hermes-modem port (default 8100)
+  -v, --verbose        verbose logs
+```
+
+### Filename frame budget
+
+To set a finite number of transmitted frames, include `-N_frames` in the filename.
+
+- Example: `example-500_frames.bin` -> transmit 500 frames then stop.
+- If suffix is absent, daemon transmits continuously until file is removed.
 
 ## Modulation Modes
 
