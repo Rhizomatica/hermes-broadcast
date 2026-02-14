@@ -21,6 +21,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#if defined(__linux__)
+#include <poll.h>
+#include <sys/inotify.h>
+#endif
 
 #include "crc6.h"
 #include "kiss.h"
@@ -157,6 +161,60 @@ static bool find_first_regular_file(const char *dirpath, char *out_path, size_t 
     if (mtime_out) *mtime_out = st.st_mtime;
     return true;
 }
+
+#if defined(__linux__)
+static int tx_watch_init(const char *tx_dir, int *watch_fd, int *watch_wd)
+{
+    *watch_fd = inotify_init1(IN_NONBLOCK);
+    if (*watch_fd < 0) return -1;
+
+    *watch_wd = inotify_add_watch(*watch_fd, tx_dir,
+                                  IN_CREATE | IN_CLOSE_WRITE | IN_MOVED_TO |
+                                  IN_ATTRIB | IN_DELETE | IN_MOVED_FROM);
+    if (*watch_wd < 0)
+    {
+        close(*watch_fd);
+        *watch_fd = -1;
+        return -1;
+    }
+    return 0;
+}
+
+static void tx_watch_close(int *watch_fd, int *watch_wd)
+{
+    if (*watch_fd >= 0 && *watch_wd >= 0)
+    {
+        inotify_rm_watch(*watch_fd, *watch_wd);
+    }
+    if (*watch_fd >= 0) close(*watch_fd);
+    *watch_fd = -1;
+    *watch_wd = -1;
+}
+
+static int tx_watch_wait_event(int watch_fd, int timeout_ms)
+{
+    struct pollfd pfd;
+    pfd.fd = watch_fd;
+    pfd.events = POLLIN;
+    pfd.revents = 0;
+
+    int pr = poll(&pfd, 1, timeout_ms);
+    if (pr <= 0) return pr;
+    if ((pfd.revents & POLLIN) == 0) return 0;
+
+    char evbuf[4096];
+    errno = 0;
+    while (read(watch_fd, evbuf, sizeof(evbuf)) > 0)
+    {
+        // drain all pending events
+    }
+    if (errno != EAGAIN && errno != EWOULDBLOCK && errno != 0)
+    {
+        return -1;
+    }
+    return 1;
+}
+#endif
 
 static bool build_output_path(const char *rx_dir, char *out_path, size_t out_path_len)
 {
@@ -363,6 +421,15 @@ static void *tx_thread_main(void *arg)
 {
     daemon_ctx_t *ctx = (daemon_ctx_t *)arg;
     tx_session_t tx = {0};
+#if defined(__linux__)
+    int watch_fd = -1;
+    int watch_wd = -1;
+    if (tx_watch_init(ctx->tx_dir, &watch_fd, &watch_wd) != 0)
+    {
+        if (ctx->verbose)
+            fprintf(stderr, "TX: inotify unavailable for %s, falling back to polling\n", ctx->tx_dir);
+    }
+#endif
 
     while (running)
     {
@@ -389,6 +456,19 @@ static void *tx_thread_main(void *arg)
             time_t mtime = 0;
             if (!find_first_regular_file(ctx->tx_dir, file_path, sizeof(file_path), &mtime))
             {
+#if defined(__linux__)
+                if (watch_fd >= 0)
+                {
+                    int wr = tx_watch_wait_event(watch_fd, 500);
+                    if (wr < 0)
+                    {
+                        if (ctx->verbose)
+                            fprintf(stderr, "TX: inotify wait failed, switching to polling\n");
+                        tx_watch_close(&watch_fd, &watch_wd);
+                    }
+                    continue;
+                }
+#endif
                 usleep(200000);
                 continue;
             }
@@ -412,6 +492,9 @@ static void *tx_thread_main(void *arg)
         }
     }
 
+#if defined(__linux__)
+    tx_watch_close(&watch_fd, &watch_wd);
+#endif
     tx_session_reset(&tx);
     return NULL;
 }
