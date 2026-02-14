@@ -503,6 +503,16 @@ static void *rx_thread_main(void *arg)
                 }
             }
         }
+        else if (ret == NANORQ_SYM_ERR)
+        {
+            if (ctx->verbose)
+            {
+                fprintf(stderr,
+                        "RX: nanorq_decoder_add_symbol error for sbn=%u, esi=%u\n",
+                        (unsigned int)sbn,
+                        (unsigned int)esi);
+            }
+        }
 
         if (rx_session_is_complete(&rx))
         {
