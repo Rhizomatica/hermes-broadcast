@@ -61,13 +61,13 @@ $ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive 1
 ### Daemon usage
 
 ```
-$ ./broadcast_daemon --mode 0 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 8100
+$ ./broadcast_daemon --mode 1 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 8100
 ```
 
 Options:
 
 ```
-  -m, --mode MODE      hermes-modem mode (0..6)
+  -m, --mode MODE      hermes-modem mode (0..6, default 1)
   -t, --tx-dir DIR     directory watched for files to transmit
   -r, --rx-dir DIR     directory where received files are written
   -i, --ip IP          hermes-modem IP (default 127.0.0.1)

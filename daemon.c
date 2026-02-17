@@ -621,7 +621,7 @@ static void *rx_thread_main(void *arg)
 static void print_usage(const char *prog)
 {
     printf("Usage: %s [options]\n", prog);
-    printf("  -m, --mode MODE      hermes-modem mode 0..6 (default: 0)\n");
+    printf("  -m, --mode MODE      hermes-modem mode 0..6 (default: 1)\n");
     printf("  -t, --tx-dir DIR     TX queue directory (default: ./tx)\n");
     printf("  -r, --rx-dir DIR     RX output directory (default: ./rx)\n");
     printf("  -i, --ip IP          modem IP (default: 127.0.0.1)\n");
@@ -637,7 +637,7 @@ int main(int argc, char *argv[])
 {
     daemon_ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
-    ctx.mode = 0;
+    ctx.mode = 1;
     strncpy(ctx.tx_dir, "./tx", sizeof(ctx.tx_dir) - 1);
     strncpy(ctx.rx_dir, "./rx", sizeof(ctx.rx_dir) - 1);
     char ip[64];
