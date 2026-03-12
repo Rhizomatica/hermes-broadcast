@@ -26,7 +26,6 @@
 #include <sys/inotify.h>
 #endif
 
-#include "crc6.h"
 #include "kiss.h"
 #include "mercury_modes.h"
 #include "tcp_interface.h"
@@ -326,8 +325,7 @@ static bool tx_send_one_frame(daemon_ctx_t *ctx, tx_session_t *tx)
     nanorq_tag_reduced((uint8_t)sbn, esi, frame + 1 + CONFIG_BODY_SIZE);
     memcpy(frame + 1 + CONFIG_BODY_SIZE + TAG_BODY_SIZE, symbol, ctx->symbol_size);
 
-    frame[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
-    frame[0] |= crc6_0X6F(1, frame + HERMES_SIZE, (int)ctx->frame_size - HERMES_SIZE);
+    hermes_write_frame_header(frame, PACKET_RQ_CONFIG, 0);
 
     if (tcp_interface_send_kiss(&ctx->tcp_iface, frame, ctx->frame_size) < 0)
     {
@@ -526,21 +524,13 @@ static void *rx_thread_main(void *arg)
             continue;
         }
 
-        uint8_t packet_type = (frame[0] >> 6) & 0x3;
+        uint8_t packet_type = hermes_frame_packet_type(frame[0]);
         if (packet_type == PACKET_RQ_PAYLOAD)
         {
-            if (ctx->verbose) fprintf(stdout, "RX: side-info packet (0x03) len=%d\n", frame_len);
+            if (ctx->verbose) fprintf(stdout, "RX: side-info packet (0x04) len=%d\n", frame_len);
             continue;
         }
-        if (packet_type != PACKET_RQ_CONFIG) continue; // v2 data path is 0x02
-
-        uint8_t crc_local = frame[0] & 0x3f;
-        uint8_t crc_calc = (uint8_t)crc6_0X6F(1, frame + HERMES_SIZE, (int)ctx->frame_size - HERMES_SIZE);
-        if (crc_local != crc_calc)
-        {
-            crc_errors++;
-            continue;
-        }
+        if (packet_type != PACKET_RQ_CONFIG) continue;
 
         uint64_t oti_common = parse_oti_common_from_frame(frame);
         uint32_t oti_scheme = parse_oti_scheme_from_frame(frame);

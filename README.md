@@ -56,7 +56,7 @@ $ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive 1
 
 ## Broadcast daemon (joint RaptorQ configuration and payload protocol)
 
-`broadcast_daemon` runs TX and RX together over one TCP/KISS connection. It uses packet type `0x02` for data frames where old config-body + payload-body are carried together in each frame (single outer Hermes header), and reserves `0x03` for side information.
+`broadcast_daemon` runs TX and RX together over one TCP/KISS connection. It uses Mercury's broadcast header values (`0x03` for config/control-style frames and `0x04` for payload/side-information frames) and treats the low 5 header bits as a reserved extension field, not a CRC.
 
 ### Daemon usage
 

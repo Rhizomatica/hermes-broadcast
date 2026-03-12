@@ -17,7 +17,6 @@
 
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
-#include "crc6.h"
 #include "tcp_interface.h"
 #include "kiss.h"
 
@@ -49,33 +48,25 @@ void exit_system(int sig)
     running = false;
 }
 
+static const char *packet_type_name(uint8_t packet_type)
+{
+    switch (packet_type)
+    {
+    case PACKET_RQ_CONFIG:
+        return "rq_config";
+    case PACKET_RQ_PAYLOAD:
+        return "rq_payload";
+    default:
+        return "unknown";
+    }
+}
+
 int8_t parse_frame_header(uint8_t *data_frame, uint32_t frame_size)
 {
-    uint8_t packet_type = (data_frame[0] >> 6) & 0x3;
-
-    uint16_t crc6_local = data_frame[0] & 0x3f;
-    uint16_t crc6_calc = 0;
-    // if packet is rq_config
-    switch(packet_type)
-    {
-    case 0x02: // RaptorQ Configuration Packet
-        crc6_calc = crc6_0X6F(1, data_frame + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
-        break;
-    case 0x03: // RaptorQ Payload Packet
-        crc6_calc = crc6_0X6F(1, data_frame + HERMES_SIZE, frame_size - HERMES_SIZE);
-        break;
-    default:
-        crc6_calc = crc6_0X6F(1, data_frame + HERMES_SIZE, frame_size - HERMES_SIZE);
-        printf("Packet type: %hhu not handled by hermes-broadcast\n", packet_type);
-    }
-
-    if (crc6_local != crc6_calc)
-    {
-        printf("CRC does not match! type=0x%02x frame_size=%u local=0x%02x calc=0x%02x\n",
-               packet_type, frame_size, crc6_local, crc6_calc);
+    if (!data_frame || frame_size < HERMES_SIZE)
         return -1;
-    }
-    return packet_type;
+
+    return (int8_t)hermes_frame_packet_type(data_frame[0]);
 }
 
 uint64_t parse_tag_oti_common(uint8_t *packet)
@@ -298,7 +289,7 @@ try_again:
     printf("\e[?25l"); // hide cursor
     uint32_t spinner_anim = 0; char spinner[] = ".oOo";
     uint64_t total_frames = 0;
-    uint64_t crc_errors = 0;
+    uint64_t header_errors = 0;
     uint64_t config_packets = 0;
     uint64_t payload_packets = 0;
     uint64_t symbols_added = 0;
@@ -328,11 +319,13 @@ try_again:
         int8_t packet_type = parse_frame_header(data_frame, rx_frame_len);
         if (packet_type < 0)
         {
-            crc_errors++;
-            continue; // bad crc
+            header_errors++;
+            continue;
         }
 
-        printf("\x1b[2K\rPkt: 0x%02x (%s) %c ", packet_type, (packet_type == 0x03)?"rq_payload":(packet_type == 0x02)?"rq_config.":"unknown", spinner[spinner_anim % 4]);
+        printf("\x1b[2K\rPkt: 0x%02x (%s) %c ",
+               packet_type, packet_type_name((uint8_t)packet_type),
+               spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 
         if (configuration_received == false && packet_type == PACKET_RQ_CONFIG)
@@ -462,11 +455,11 @@ try_again:
         if ((total_frames % 50) == 0)
         {
             fprintf(stderr,
-                    "\n[DBG RX] total=%llu cfg=%llu payload=%llu crc_err=%llu sym_added=%llu sym_dup=%llu sym_err=%llu decoded=%llu/%d len=%u mismatch=%llu pre_cfg_payload=%llu\n",
+                    "\n[DBG RX] total=%llu cfg=%llu payload=%llu hdr_err=%llu sym_added=%llu sym_dup=%llu sym_err=%llu decoded=%llu/%d len=%u mismatch=%llu pre_cfg_payload=%llu\n",
                     (unsigned long long)total_frames,
                     (unsigned long long)config_packets,
                     (unsigned long long)payload_packets,
-                    (unsigned long long)crc_errors,
+                    (unsigned long long)header_errors,
                     (unsigned long long)symbols_added,
                     (unsigned long long)symbols_dup,
                     (unsigned long long)symbols_err,
