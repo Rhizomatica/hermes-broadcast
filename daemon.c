@@ -26,7 +26,6 @@
 #include <sys/inotify.h>
 #endif
 
-#include "crc6.h"
 #include "kiss.h"
 #include "mercury_modes.h"
 #include "tcp_interface.h"
@@ -326,8 +325,7 @@ static bool tx_send_one_frame(daemon_ctx_t *ctx, tx_session_t *tx)
     nanorq_tag_reduced((uint8_t)sbn, esi, frame + 1 + CONFIG_BODY_SIZE);
     memcpy(frame + 1 + CONFIG_BODY_SIZE + TAG_BODY_SIZE, symbol, ctx->symbol_size);
 
-    frame[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
-    frame[0] |= crc6_0X6F(1, frame + HERMES_SIZE, (int)ctx->frame_size - HERMES_SIZE);
+    hermes_write_frame_header(frame, PACKET_RQ_CONFIG, 0);
 
     if (tcp_interface_send_kiss(&ctx->tcp_iface, frame, ctx->frame_size) < 0)
     {
@@ -504,7 +502,7 @@ static void *rx_thread_main(void *arg)
     daemon_ctx_t *ctx = (daemon_ctx_t *)arg;
     rx_session_t rx = {0};
     uint64_t frames_rx = 0;
-    uint64_t crc_errors = 0;
+    uint64_t header_errors = 0;
 
     uint8_t frame[MAX_PAYLOAD];
     while (running)
@@ -526,19 +524,39 @@ static void *rx_thread_main(void *arg)
             continue;
         }
 
-        uint8_t packet_type = (frame[0] >> 6) & 0x3;
-        if (packet_type == PACKET_RQ_PAYLOAD)
+        uint8_t packet_type = hermes_frame_packet_type(frame[0]);
+        uint8_t extension = hermes_frame_extension(frame[0]);
+        if (extension != 0)
         {
-            if (ctx->verbose) fprintf(stdout, "RX: side-info packet (0x03) len=%d\n", frame_len);
+            header_errors++;
+            if (ctx->verbose)
+            {
+                fprintf(stderr,
+                        "RX: dropping frame type=0x%02x reserved_ext=0x%02x len=%d\n",
+                        (unsigned int)packet_type,
+                        (unsigned int)extension,
+                        frame_len);
+            }
             continue;
         }
-        if (packet_type != PACKET_RQ_CONFIG) continue; // v2 data path is 0x02
 
-        uint8_t crc_local = frame[0] & 0x3f;
-        uint8_t crc_calc = (uint8_t)crc6_0X6F(1, frame + HERMES_SIZE, (int)ctx->frame_size - HERMES_SIZE);
-        if (crc_local != crc_calc)
+        if (packet_type == PACKET_RQ_PAYLOAD)
         {
-            crc_errors++;
+            if (ctx->verbose)
+            {
+                fprintf(stdout, "RX: side-info packet (0x%02x) len=%d\n",
+                        (unsigned int)packet_type, frame_len);
+            }
+            continue;
+        }
+        if (packet_type != PACKET_RQ_CONFIG)
+        {
+            header_errors++;
+            if (ctx->verbose)
+            {
+                fprintf(stderr, "RX: dropping unknown packet type=0x%02x len=%d\n",
+                        (unsigned int)packet_type, frame_len);
+            }
             continue;
         }
 
@@ -608,9 +626,9 @@ static void *rx_thread_main(void *arg)
 
         if (ctx->verbose && (frames_rx % 200) == 0)
         {
-            fprintf(stdout, "RX: frames=%llu crc_errors=%llu\n",
+            fprintf(stdout, "RX: frames=%llu header_errors=%llu\n",
                     (unsigned long long)frames_rx,
-                    (unsigned long long)crc_errors);
+                    (unsigned long long)header_errors);
         }
     }
 

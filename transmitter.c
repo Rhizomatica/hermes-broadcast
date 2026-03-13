@@ -18,7 +18,6 @@
 
 #include "ring_buffer_posix.h"
 #include "mercury_modes.h"
-#include "crc6.h"
 #include "tcp_interface.h"
 
 #include <nanorq.h>
@@ -66,9 +65,7 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
         // add our reduced tag
         nanorq_tag_reduced(sbn, esi, data+1); // 3 bytes
 
-        // set payload packet type
-        data[0] = (PACKET_RQ_PAYLOAD << 6) & 0xff;
-        data[0] |= crc6_0X6F(1, data+1, packet_size + TAG_SIZE);
+        hermes_write_frame_header(data, PACKET_RQ_PAYLOAD, 0);
 
         if (out_mode == OUTPUT_SHM)
         {
@@ -281,8 +278,7 @@ int main(int argc, char *argv[]) {
     nanorq_oti_common_reduced(rq, configuration_packet+1); // 5 bytes
     nanorq_oti_scheme_specific_align1(rq, configuration_packet+6); // 3 bytes
 
-    configuration_packet[0] = (PACKET_RQ_CONFIG << 6) & 0xff;
-    configuration_packet[0] |= crc6_0X6F(1, configuration_packet + HERMES_SIZE, CONFIG_PACKET_SIZE - HERMES_SIZE);
+    hermes_write_frame_header(configuration_packet, PACKET_RQ_CONFIG, 0);
 
     cbuf_handle_t buffer = NULL;
 
