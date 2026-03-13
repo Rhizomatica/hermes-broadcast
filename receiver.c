@@ -324,7 +324,8 @@ try_again:
         }
 
         printf("\x1b[2K\rPkt: 0x%02x (%s) %c ",
-               packet_type, packet_type_name((uint8_t)packet_type),
+               (unsigned int)(uint8_t)packet_type,
+               packet_type_name((uint8_t)packet_type),
                spinner[spinner_anim % 4]);
         spinner_anim++; fflush(stdout);
 

@@ -502,7 +502,7 @@ static void *rx_thread_main(void *arg)
     daemon_ctx_t *ctx = (daemon_ctx_t *)arg;
     rx_session_t rx = {0};
     uint64_t frames_rx = 0;
-    uint64_t crc_errors = 0;
+    uint64_t header_errors = 0;
 
     uint8_t frame[MAX_PAYLOAD];
     while (running)
@@ -525,12 +525,40 @@ static void *rx_thread_main(void *arg)
         }
 
         uint8_t packet_type = hermes_frame_packet_type(frame[0]);
-        if (packet_type == PACKET_RQ_PAYLOAD)
+        uint8_t extension = hermes_frame_extension(frame[0]);
+        if (extension != 0)
         {
-            if (ctx->verbose) fprintf(stdout, "RX: side-info packet (0x04) len=%d\n", frame_len);
+            header_errors++;
+            if (ctx->verbose)
+            {
+                fprintf(stderr,
+                        "RX: dropping frame type=0x%02x reserved_ext=0x%02x len=%d\n",
+                        (unsigned int)packet_type,
+                        (unsigned int)extension,
+                        frame_len);
+            }
             continue;
         }
-        if (packet_type != PACKET_RQ_CONFIG) continue;
+
+        if (packet_type == PACKET_RQ_PAYLOAD)
+        {
+            if (ctx->verbose)
+            {
+                fprintf(stdout, "RX: side-info packet (0x%02x) len=%d\n",
+                        (unsigned int)packet_type, frame_len);
+            }
+            continue;
+        }
+        if (packet_type != PACKET_RQ_CONFIG)
+        {
+            header_errors++;
+            if (ctx->verbose)
+            {
+                fprintf(stderr, "RX: dropping unknown packet type=0x%02x len=%d\n",
+                        (unsigned int)packet_type, frame_len);
+            }
+            continue;
+        }
 
         uint64_t oti_common = parse_oti_common_from_frame(frame);
         uint32_t oti_scheme = parse_oti_scheme_from_frame(frame);
@@ -598,9 +626,9 @@ static void *rx_thread_main(void *arg)
 
         if (ctx->verbose && (frames_rx % 200) == 0)
         {
-            fprintf(stdout, "RX: frames=%llu crc_errors=%llu\n",
+            fprintf(stdout, "RX: frames=%llu header_errors=%llu\n",
                     (unsigned long long)frames_rx,
-                    (unsigned long long)crc_errors);
+                    (unsigned long long)header_errors);
         }
     }
 
