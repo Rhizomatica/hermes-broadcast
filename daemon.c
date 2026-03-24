@@ -144,6 +144,7 @@ static bool find_first_regular_file(const char *dirpath, char *out_path, size_t 
         struct stat st;
         if (stat(candidate, &st) != 0) continue;
         if (!S_ISREG(st.st_mode)) continue;
+        if (st.st_size == 0) continue;
         if (!found || strcmp(de->d_name, best_name) < 0)
         {
             found = true;
@@ -479,7 +480,10 @@ static void *tx_thread_main(void *arg)
 
         if (tx.frames_limit != -1 && tx.frames_sent >= tx.frames_limit)
         {
-            usleep(200000);
+            fprintf(stdout, "TX: frame budget exhausted (%lld frames), removing %s\n",
+                    (long long)tx.frames_sent, tx.file_path);
+            unlink(tx.file_path);
+            tx_session_reset(&tx);
             continue;
         }
 
