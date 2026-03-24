@@ -50,3 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Binaries
+transmitter
+receiver
+broadcast_daemon
+oblas/tablegen
