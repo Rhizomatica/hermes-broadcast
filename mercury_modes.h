@@ -16,6 +16,14 @@
 #define FRAME_EXT_MASK 0x1f
 
 
+/*
+ * These are packet types encoded in the first byte of the modem frame.
+ * They are not KISS command bytes.
+ *
+ * In the current TCP path, the outer KISS frame normally uses CMD_DATA and the
+ * receiver inspects frame[0] to distinguish RaptorQ configuration/control from
+ * RaptorQ payload-bearing broadcast frames.
+ */
 #define PACKET_RAW 0x00
 #define PACKET_UUCP 0x01
 #define PACKET_RQ_CONFIG 0x03

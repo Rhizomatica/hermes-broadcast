@@ -20,12 +20,23 @@ extern "C" {
 #define TFEND 0xDC
 #define TFESC 0xDD
 
+/*
+ * KISS command bytes describe the outer TCP/TNC framing only.
+ *
+ * Current hermes-broadcast TCP interoperability with Mercury sends raw modem
+ * frames inside CMD_DATA. The first byte of that modem frame then carries the
+ * Mercury/hermes broadcast packet type defined in mercury_modes.h.
+ *
+ * So PACKET_RQ_CONFIG / PACKET_RQ_PAYLOAD live in frame[0], while CMD_RQ_* are
+ * only reserved/legacy KISS command-space values and are not the normal wire
+ * format used by transmitter/receiver/broadcast_daemon over TCP.
+ */
 #define CMD_UNKNOWN 0xFE
 #define CMD_AX25 0x00 //  AX25 Frame (standard) in VARA
 #define CMD_AX25CALLSIGN 0x01 // AX25 Frame (7 chrs Call Signs) in VARA
-#define CMD_DATA 0x02 // VARA / Mercury unformatted frame
-#define CMD_RQ_CONFIG 0x03 // Mercury special fountain code configuration frame
-#define CMD_RQ_PAYLOAD 0x04 // Fountain code payload
+#define CMD_DATA 0x02 // Raw/unformatted KISS payload; current Mercury TCP framing uses this
+#define CMD_RQ_CONFIG 0x03 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ config
+#define CMD_RQ_PAYLOAD 0x04 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ payload
 
 #define MAX_PAYLOAD 756 // ~ 18 frames at VARA Level 4
 
