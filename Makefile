@@ -9,34 +9,35 @@ uname_p := $(shell uname -m)
 CC=gcc
 
 CPPFLAGS = -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64
-CFLAGS   = -O3 -g -std=c99 -Wall -I. -Iraptorq -Ioblas -pthread
-CFLAGS  += -funroll-loops -ftree-vectorize -fno-inline -fstack-protector-all
+CFLAGS   = -O3 -g -std=c11 -Wall -I. -Iraptorq/include -Iraptorq/deps -pthread
+CFLAGS  += -funroll-loops -ftree-vectorize -fno-inline -fstack-protector-all -Wno-unused -Wno-sequence-point
 LDFLAGS = -lpthread -lrt
 
 ifeq (${uname_p},aarch64)
-	OBLAS_CPPFLAGS="-DOBLAS_NEON"
 # aarch64 Raspberry Pi 4 or better
 	CFLAGS+=-moutline-atomics -march=armv8-a+crc
 # for Pi 5 use:
 #	CFLAGS+=-march=armv8.2-a+crypto+fp16+rcpc+dotprod
 else
-	OBLAS_CPPFLAGS="-DOBLAS_AVX -DOCTMAT_ALIGN=32"
 # x86_64 with SSE 4.2 level or better
 	CFLAGS+=-march=x86-64-v2
 endif
 
 # RaptorQ nanorq implementation
 OBJ=\
-raptorq/bitmask.o\
-raptorq/io.o\
-raptorq/params.o\
-raptorq/precode.o\
-raptorq/rand.o\
-raptorq/sched.o\
-raptorq/spmat.o\
-raptorq/tuple.o\
-raptorq/wrkmat.o\
-raptorq/nanorq.o
+raptorq/lib/chooser.o\
+raptorq/lib/io.o\
+raptorq/lib/nanorq.o\
+raptorq/lib/nanorq_core.o\
+raptorq/lib/ops.o\
+raptorq/lib/params.o\
+raptorq/lib/partition.o\
+raptorq/lib/precode.o\
+raptorq/lib/rand.o\
+raptorq/lib/sopi.o\
+raptorq/lib/tuple.o\
+raptorq/lib/uvec.o\
+raptorq/deps/obl/oblas_lite.o
 
 # Common objects for TCP/KISS support
 COMMON_OBJ = shm_posix.o ring_buffer_posix.o crc6.o kiss.o tcp_interface.o
@@ -62,15 +63,11 @@ transmitter: transmitter.o $(COMMON_OBJ) raptorq/libnanorq.a
 broadcast_daemon: daemon.o $(COMMON_OBJ) raptorq/libnanorq.a
 	$(CC) daemon.o $(COMMON_OBJ) raptorq/libnanorq.a -o broadcast_daemon $(LDFLAGS)
 
-oblas/liboblas.a:
-	$(MAKE) -C oblas CPPFLAGS+=$(OBLAS_CPPFLAGS)
-
-raptorq/libnanorq.a: $(OBJ) oblas/liboblas.a
-	$(AR) rcs $@ $(OBJ) oblas/*.o
+raptorq/libnanorq.a: $(OBJ)
+	$(AR) rcs $@ $(OBJ)
 
 
 .PHONY: clean
 
 clean:
-	$(RM) transmitter receiver broadcast_daemon raptorq/*.o raptorq/*.a *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old
-	$(MAKE) -C oblas clean
+	$(RM) transmitter receiver broadcast_daemon raptorq/*.o raptorq/*.a raptorq/lib/*.o raptorq/deps/obl/*.o *.o *.a *.gcda *.gcno *.gcov callgrind.* *.gperf *.prof *.heap perf.data perf.data.old

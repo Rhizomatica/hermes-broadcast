@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,7 +65,7 @@ struct ioctx *ioctx_from_file(const char *fn, int t) {
   if (!fp)
     return NULL;
 
-  _io = calloc(1, sizeof(struct fileioctx));
+  _io = (struct fileioctx *)calloc(1, sizeof(struct fileioctx));
   _io->fp = fp;
 
   _io->io.read = fileio_read;
@@ -114,7 +115,7 @@ static size_t memio_write(struct ioctx *io, const uint8_t *buf, size_t len) {
 
 static bool memio_seek(struct ioctx *io, const size_t offset) {
   struct memioctx *_io = (struct memioctx *)io;
-  if (offset >= _io->size)
+  if (offset > _io->size)
     return false;
   _io->pos = offset;
   return true;
@@ -139,7 +140,7 @@ static size_t memio_size(struct ioctx *io) {
 struct ioctx *ioctx_from_mem(const uint8_t *ptr, size_t sz) {
   struct memioctx *_io = NULL;
 
-  _io = calloc(1, sizeof(struct memioctx));
+  _io = (struct memioctx *)calloc(1, sizeof(struct memioctx));
   _io->ptr = (uint8_t *)ptr;
   _io->pos = 0;
   _io->size = sz;
@@ -172,14 +173,13 @@ static uint8_t *mmapio_mmap(size_t mapsize, bool writable, int fd,
   uint8_t *ptr = NULL;
 
   if (writable) {
-    ptr = mmap(NULL, mapsize, PROT_WRITE, MAP_SHARED, fd, offset);
+    ptr = (uint8_t *)mmap(NULL, mapsize, PROT_WRITE, MAP_SHARED, fd, offset);
   } else {
-    ptr = mmap(NULL, mapsize, PROT_READ, MAP_SHARED, fd, offset);
+    ptr = (uint8_t *)mmap(NULL, mapsize, PROT_READ, MAP_SHARED, fd, offset);
   }
 
   if (ptr == MAP_FAILED) {
     perror("mmap() failed: ");
-    abort();
     exit(EXIT_FAILURE);
   }
   return ptr;
@@ -207,8 +207,8 @@ static bool mmapio_seek(struct ioctx *io, const size_t offset) {
     } else {
       munmap(_io->ptr, _io->mapsize);
       _io->offset = (offset / _io->mapsize) * _io->mapsize;
-      _io->filesize = _io->offset;
-      ftruncate(_io->fd, _io->filesize + _io->filesize);
+      _io->filesize = (offset > _io->filesize) ? offset : _io->filesize;
+      ftruncate(_io->fd, _io->offset + _io->mapsize);
       _io->ptr =
           mmapio_mmap(_io->mapsize, _io->io.writable, _io->fd, _io->offset);
       _io->pos = offset;
@@ -225,8 +225,7 @@ static bool mmapio_seek(struct ioctx *io, const size_t offset) {
     size_t tmp = _io->mapsize;
     if (_io->offset + tmp > _io->filesize)
       tmp = _io->filesize - _io->offset;
-    _io->ptr =
-        mmapio_mmap(_io->mapsize, _io->io.writable, _io->fd, _io->offset);
+    _io->ptr = mmapio_mmap(tmp, _io->io.writable, _io->fd, _io->offset);
     _io->pos = offset;
     _io->lastmap = tmp;
     return true;
@@ -237,72 +236,53 @@ static bool mmapio_seek(struct ioctx *io, const size_t offset) {
 
 static size_t mmapio_read(struct ioctx *io, uint8_t *buf, size_t len) {
   struct mmapioctx *_io = (struct mmapioctx *)io;
+  size_t read_bytes = 0;
 
-  size_t at = _io->pos % _io->mapsize;
-  if (_io->pos + len > _io->filesize) {
-    size_t diff = _io->filesize - _io->pos;
-    memcpy(buf, _io->ptr + at, diff);
-    _io->pos = _io->filesize;
-    return diff;
-  }
+  while (read_bytes < len) {
+    if (_io->pos >= _io->filesize)
+      break;
 
-  if (at + len < _io->mapsize) {
-    memcpy(buf, _io->ptr + at, len);
-    _io->pos += len;
-    return len;
-  } else {
-    size_t read = 0, diff = 0;
-    while (read < len || _io->pos == _io->filesize) {
-      at = _io->pos % _io->mapsize;
-      diff = (_io->lastmap - at);
-      memcpy(buf, _io->ptr + at, diff);
-      read += diff;
-      _io->pos += diff;
-      if (_io->lastmap != _io->mapsize)
-        break;
-      if (mmapio_seek(io, _io->offset + _io->mapsize)) {
-        int left = len - diff;
-        if (_io->pos + left > _io->filesize) {
-          left = _io->filesize - _io->pos;
-        }
-        memcpy(buf + read, _io->ptr, left);
-        _io->pos += left;
-        read += left;
-      }
+    size_t at = _io->pos % _io->mapsize;
+    size_t avail = _io->lastmap - at;
+
+    size_t to_read = (len - read_bytes < avail) ? (len - read_bytes) : avail;
+
+    if (to_read > 0) {
+      memcpy(buf + read_bytes, _io->ptr + at, to_read);
+      read_bytes += to_read;
+      _io->pos += to_read;
     }
-    return read;
-  }
 
-  return 0;
+    if (read_bytes < len && _io->pos < _io->filesize) {
+      if (!mmapio_seek(io, _io->offset + _io->mapsize))
+        break;
+    }
+  }
+  return read_bytes;
 }
 
 static size_t mmapio_write(struct ioctx *io, const uint8_t *buf, size_t len) {
   struct mmapioctx *_io = (struct mmapioctx *)io;
-  size_t written = 0, at = 0;
-
-  if (_io->pos + len < _io->offset + _io->mapsize) {
-    at = _io->pos % _io->mapsize;
-    memcpy(_io->ptr + at, buf + written, len);
-    _io->pos += len;
-    _io->filesize = (_io->pos > _io->filesize) ? _io->pos : _io->filesize;
-    return len;
-  }
+  size_t written = 0;
 
   while (written < len) {
-    at = _io->pos % _io->mapsize;
-    size_t diff = (at + len < _io->mapsize) ? len : (_io->mapsize - at);
-    memcpy(_io->ptr + at, buf + written, diff);
-    written += diff;
-    _io->pos += diff;
-    _io->filesize = (_io->pos > _io->filesize) ? _io->pos : _io->filesize;
-    // seek if needed
-    if (mmapio_seek(io, _io->offset + _io->mapsize)) {
-      size_t left = len - diff;
-      at = _io->pos % _io->mapsize;
-      memcpy(_io->ptr + at, buf + written, left);
-      written += left;
-      _io->pos += left;
-      _io->filesize = (_io->pos > _io->filesize) ? _io->pos : _io->filesize;
+    size_t at = _io->pos % _io->mapsize;
+    size_t avail = _io->mapsize - at;
+
+    size_t to_write = (len - written < avail) ? (len - written) : avail;
+
+    if (to_write > 0) {
+      memcpy(_io->ptr + at, buf + written, to_write);
+      written += to_write;
+      _io->pos += to_write;
+      if (_io->pos > _io->filesize) {
+        _io->filesize = _io->pos;
+      }
+    }
+
+    if (written < len) {
+      if (!mmapio_seek(io, _io->offset + _io->mapsize))
+        break;
     }
   }
 
@@ -366,7 +346,7 @@ struct ioctx *ioctx_mmap_file(const char *fn, int t) {
     ptr = mmapio_mmap(mapsize, true, fd, offset);
   }
 
-  _io = calloc(1, sizeof(struct mmapioctx));
+  _io = (struct mmapioctx *)calloc(1, sizeof(struct mmapioctx));
   _io->fd = fd;
   _io->ptr = ptr;
   _io->filesize = filesize;
