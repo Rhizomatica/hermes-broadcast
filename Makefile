@@ -9,18 +9,19 @@ uname_p := $(shell uname -m)
 CC=gcc
 
 CPPFLAGS = -D_DEFAULT_SOURCE -D_FILE_OFFSET_BITS=64
-CFLAGS   = -O3 -g -std=c11 -Wall -I. -Iraptorq/include -Iraptorq/deps -pthread
+CFLAGS   = -O3 -g -std=c11 -Wall -I. -Iraptorq/include -Iraptorq/deps -Iraptorq/src -pthread
+CFLAGS  += -Wno-error=incompatible-pointer-types
 CFLAGS  += -funroll-loops -ftree-vectorize -fno-inline -fstack-protector-all -Wno-unused -Wno-sequence-point
 LDFLAGS = -lpthread -lrt
 
 ifeq (${uname_p},aarch64)
 # aarch64 Raspberry Pi 4 or better
-	CFLAGS+=-moutline-atomics -march=armv8-a+crc
+        CFLAGS+=-moutline-atomics -march=armv8-a+crc
 # for Pi 5 use:
-#	CFLAGS+=-march=armv8.2-a+crypto+fp16+rcpc+dotprod
+#       CFLAGS+=-march=armv8.2-a+crypto+fp16+rcpc+dotprod
 else
 # x86_64 with SSE 4.2 level or better
-	CFLAGS+=-march=x86-64-v2
+        CFLAGS+=-march=x86-64-v2
 endif
 
 # RaptorQ nanorq implementation
