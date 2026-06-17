@@ -53,6 +53,7 @@ typedef struct {
     int64_t frames_limit;   // -1 means continuous
     int64_t frames_sent;
     int next_sbn;
+    uint8_t session_id;     // random per-file ID encoded in frame extension field
     uint8_t config_body[CONFIG_BODY_SIZE];
     struct ioctx *myio;
     nanorq *rq;
@@ -63,6 +64,8 @@ typedef struct {
 typedef struct {
     bool active;
     bool completed_last;
+    uint8_t session_id;                   // session_id of the current active session
+    uint8_t last_completed_session_id;    // session_id of the last successfully completed session
     uint64_t last_completed_oti_common;
     uint32_t last_completed_oti_scheme;
     uint64_t oti_common;
@@ -98,10 +101,12 @@ static void rx_session_reset(rx_session_t *rx)
     free(rx->block_decoded);
     free(rx->block_symbols_seen);
     bool completed_last = rx->completed_last;
+    uint8_t last_session_id = rx->last_completed_session_id;
     uint64_t last_common = rx->last_completed_oti_common;
     uint32_t last_scheme = rx->last_completed_oti_scheme;
     memset(rx, 0, sizeof(*rx));
     rx->completed_last = completed_last;
+    rx->last_completed_session_id = last_session_id;
     rx->last_completed_oti_common = last_common;
     rx->last_completed_oti_scheme = last_scheme;
 }
@@ -293,6 +298,7 @@ static bool tx_session_open(daemon_ctx_t *ctx, tx_session_t *tx, const char *fil
     tx->frames_limit = parse_frames_limit_from_filename(file_path);
     tx->frames_sent = 0;
     tx->next_sbn = 0;
+    tx->session_id = (uint8_t)(1 + (rand() % (int)FRAME_EXT_MASK));
     tx->active = true;
 
     fprintf(stdout, "TX: loaded file %s (frames_limit=%lld, symbol_size=%u, blocks=%d)\n",
@@ -326,7 +332,7 @@ static bool tx_send_one_frame(daemon_ctx_t *ctx, tx_session_t *tx)
     nanorq_tag_reduced((uint8_t)sbn, esi, frame + 1 + CONFIG_BODY_SIZE);
     memcpy(frame + 1 + CONFIG_BODY_SIZE + TAG_BODY_SIZE, symbol, ctx->symbol_size);
 
-    hermes_write_frame_header(frame, PACKET_RQ_CONFIG, 0);
+    hermes_write_frame_header(frame, PACKET_RQ_CONFIG, tx->session_id);
 
     if (tcp_interface_send_kiss(&ctx->tcp_iface, frame, ctx->frame_size) < 0)
     {
@@ -363,7 +369,7 @@ static uint32_t parse_oti_scheme_from_frame(const uint8_t *frame)
     return oti_scheme;
 }
 
-static bool rx_session_start(daemon_ctx_t *ctx, rx_session_t *rx, uint64_t oti_common, uint32_t oti_scheme)
+static bool rx_session_start(daemon_ctx_t *ctx, rx_session_t *rx, uint64_t oti_common, uint32_t oti_scheme, uint8_t session_id)
 {
     rx_session_reset(rx);
 
@@ -401,6 +407,7 @@ static bool rx_session_start(daemon_ctx_t *ctx, rx_session_t *rx, uint64_t oti_c
 
     rx->oti_common = oti_common;
     rx->oti_scheme = oti_scheme;
+    rx->session_id = session_id;
     rx->active = true;
 
     fprintf(stdout, "RX: new session -> %s (blocks=%d)\n", rx->out_path, rx->num_sbn);
@@ -529,20 +536,6 @@ static void *rx_thread_main(void *arg)
         }
 
         uint8_t packet_type = hermes_frame_packet_type(frame[0]);
-        uint8_t extension = hermes_frame_extension(frame[0]);
-        if (extension != 0)
-        {
-            header_errors++;
-            if (ctx->verbose)
-            {
-                fprintf(stderr,
-                        "RX: dropping frame type=0x%02x reserved_ext=0x%02x len=%d\n",
-                        (unsigned int)packet_type,
-                        (unsigned int)extension,
-                        frame_len);
-            }
-            continue;
-        }
 
         if (packet_type == PACKET_RQ_PAYLOAD)
         {
@@ -564,10 +557,13 @@ static void *rx_thread_main(void *arg)
             continue;
         }
 
+        /* Extension field carries the per-file session_id set by the TX. */
+        uint8_t session_id = hermes_frame_extension(frame[0]);
         uint64_t oti_common = parse_oti_common_from_frame(frame);
         uint32_t oti_scheme = parse_oti_scheme_from_frame(frame);
 
         if (rx.completed_last &&
+            rx.last_completed_session_id == session_id &&
             rx.last_completed_oti_common == oti_common &&
             rx.last_completed_oti_scheme == oti_scheme &&
             !rx.active)
@@ -576,10 +572,11 @@ static void *rx_thread_main(void *arg)
         }
 
         if (!rx.active ||
+            rx.session_id != session_id ||
             rx.oti_common != oti_common ||
             rx.oti_scheme != oti_scheme)
         {
-            if (!rx_session_start(ctx, &rx, oti_common, oti_scheme))
+            if (!rx_session_start(ctx, &rx, oti_common, oti_scheme, session_id))
             {
                 continue;
             }
@@ -623,6 +620,7 @@ static void *rx_thread_main(void *arg)
         {
             fprintf(stdout, "RX: FILE RECEIVED -> %s\n", rx.out_path);
             rx.completed_last = true;
+            rx.last_completed_session_id = rx.session_id;
             rx.last_completed_oti_common = rx.oti_common;
             rx.last_completed_oti_scheme = rx.oti_scheme;
             rx_session_reset(&rx);
@@ -713,6 +711,8 @@ int main(int argc, char *argv[])
 
     mkdir(ctx.rx_dir, 0775);
     mkdir(ctx.tx_dir, 0775);
+
+    srand((unsigned int)time(NULL));
 
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
