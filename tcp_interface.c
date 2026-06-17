@@ -1,4 +1,4 @@
-/* TCP interface for hermes-broadcast to hermes-modem communication
+/* TCP interface for hermes-broadcast to mercury communication
  *
  * Copyright (C) 2024 Rhizomatica
  * Author: Rafael Diniz <rafael@rhizomatica.org>
@@ -67,14 +67,14 @@ bool tcp_interface_connect(tcp_interface_t *iface)
 
     if (connect(iface->socket, (struct sockaddr *)&modem_addr, sizeof(modem_addr)) < 0)
     {
-        perror("tcp_interface: Failed to connect to hermes-modem");
+        perror("tcp_interface: Failed to connect to mercury");
         close(iface->socket);
         iface->socket = -1;
         return false;
     }
 
     iface->connected = true;
-    printf("tcp_interface: Connected to hermes-modem at %s:%d\n", iface->ip, iface->port);
+    printf("tcp_interface: Connected to mercury at %s:%d\n", iface->ip, iface->port);
     return true;
 }
 

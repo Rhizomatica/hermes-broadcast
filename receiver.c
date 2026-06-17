@@ -105,13 +105,13 @@ void print_usage(const char *prog_name)
 {
     printf("Usage: %s [options] file_to_receive modulation_mode\n", prog_name);
     printf("\nOptions:\n");
-    printf("  -t, --tcp         Use TCP input from hermes-modem (default: shared memory)\n");
-    printf("  -i, --ip IP       IP address of hermes-modem (default: %s)\n", DEFAULT_MODEM_IP);
-    printf("  -p, --port PORT   TCP port of hermes-modem (default: %d)\n", DEFAULT_MODEM_PORT);
+    printf("  -t, --tcp         Use TCP input from mercury (default: shared memory)\n");
+    printf("  -i, --ip IP       IP address of mercury (default: %s)\n", DEFAULT_MODEM_IP);
+    printf("  -p, --port PORT   TCP port of mercury (default: %d)\n", DEFAULT_MODEM_PORT);
     printf("  -h, --help        Show this help message\n");
     printf("\nModulation modes:\n");
     printf("  Shared memory (Mercury): 0-16\n");
-    printf("  TCP (hermes-modem):      0-6\n");
+    printf("  TCP (mercury):      0-6\n");
     printf("    Mode 0: DATAC1  (510 bytes)\n");
     printf("    Mode 1: DATAC3  (126 bytes)\n");
     printf("    Mode 2: DATAC0  (14 bytes)\n");
@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
     if (mod_mode < 0 || mod_mode > max_mode)
     {
         printf("Invalid mode %d. Valid modes range from 0 to %d for %s.\n",
-               mod_mode, max_mode, (in_mode == INPUT_TCP) ? "TCP/hermes-modem" : "SHM/Mercury");
+               mod_mode, max_mode, (in_mode == INPUT_TCP) ? "TCP/mercury" : "SHM/Mercury");
         return -1;
     }
 
@@ -265,11 +265,11 @@ int main(int argc, char *argv[])
         tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
         if (!tcp_interface_connect(&tcp_iface))
         {
-            fprintf(stderr, "Failed to connect to hermes-modem at %s:%d\n", tcp_ip, tcp_port);
+            fprintf(stderr, "Failed to connect to mercury at %s:%d\n", tcp_ip, tcp_port);
             myio->destroy(myio);
             return -1;
         }
-        printf("Input mode: TCP from hermes-modem (%s:%d)\n", tcp_ip, tcp_port);
+        printf("Input mode: TCP from mercury (%s:%d)\n", tcp_ip, tcp_port);
     }
     else
     {

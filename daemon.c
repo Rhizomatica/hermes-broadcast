@@ -641,7 +641,7 @@ static void *rx_thread_main(void *arg)
 static void print_usage(const char *prog)
 {
     printf("Usage: %s [options]\n", prog);
-    printf("  -m, --mode MODE      hermes-modem mode 0..6 (default: 1)\n");
+    printf("  -m, --mode MODE      mercury mode 0..6 (default: 1)\n");
     printf("  -t, --tx-dir DIR     TX queue directory (default: ./tx)\n");
     printf("  -r, --rx-dir DIR     RX output directory (default: ./rx)\n");
     printf("  -i, --ip IP          modem IP (default: 127.0.0.1)\n");
@@ -720,7 +720,7 @@ int main(int argc, char *argv[])
     tcp_interface_init(&ctx.tcp_iface, ip, port);
     if (!tcp_interface_connect(&ctx.tcp_iface))
     {
-        fprintf(stderr, "Failed to connect to hermes-modem at %s:%d\n", ip, port);
+        fprintf(stderr, "Failed to connect to mercury at %s:%d\n", ip, port);
         return 1;
     }
 

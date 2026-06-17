@@ -1,4 +1,4 @@
-/* TCP interface for hermes-broadcast to hermes-modem communication
+/* TCP interface for hermes-broadcast to mercury communication
  *
  * Copyright (C) 2024 Rhizomatica
  * Author: Rafael Diniz <rafael@rhizomatica.org>
@@ -34,17 +34,17 @@ typedef struct {
 // Initialize TCP interface structure
 void tcp_interface_init(tcp_interface_t *iface, const char *ip, int port);
 
-// Connect to hermes-modem
+// Connect to mercury
 bool tcp_interface_connect(tcp_interface_t *iface);
 
-// Disconnect from hermes-modem
+// Disconnect from mercury
 void tcp_interface_disconnect(tcp_interface_t *iface);
 
-// Send data with KISS framing to hermes-modem (thread-safe)
+// Send data with KISS framing to mercury (thread-safe)
 // Returns number of bytes sent on success, -1 on error
 int tcp_interface_send_kiss(tcp_interface_t *iface, uint8_t *data, size_t len);
 
-// Receive data with KISS framing from hermes-modem
+// Receive data with KISS framing from mercury
 // Returns frame length when complete frame received, 0 if no complete frame, -1 on error
 // frame_buffer should be at least MAX_PAYLOAD bytes
 int tcp_interface_recv_kiss(tcp_interface_t *iface, uint8_t *frame_buffer);

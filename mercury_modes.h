@@ -56,10 +56,10 @@ static inline void hermes_write_frame_header(uint8_t *frame, uint8_t packet_type
 uint32_t mercury_frame_size[17] = { 12, 25, 37, 50, 62, 75, 100, 62, 75, 100, 74, 99, 175, 100, 174, 175, 162};
 
 
-/****** hermes-modem modes ******/
+/****** mercury modes ******/
 #define HERMES_MODE_MAX 6 // 0 to 6, size 7
 
-// hermes-modem payload_bytes_per_modem_frame for modes 0 to 6
+// mercury payload_bytes_per_modem_frame for modes 0 to 6
 // Mode 0: DATAC1  - 510 bytes
 // Mode 1: DATAC3  - 126 bytes
 // Mode 2: DATAC0  -  14 bytes

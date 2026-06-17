@@ -1,6 +1,6 @@
 # hermes-broadcast
 
-High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for data broadcast over HF. Supports Mercury (https://github.com/Rhizomatica/mercury) modem and hermes-modem.
+High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for data broadcast over HF. Supports Mercury (https://github.com/Rhizomatica/mercury) modem.
 
 Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ implementation: https://github.com/sleepybishop/nanorq/).
 
@@ -27,9 +27,9 @@ $ ./transmitter file_to_transmit 10
 $ ./receiver file_to_receive 10
 ```
 
-## TCP Mode (hermes-modem)
+## TCP Mode (mercury)
 
-For use with hermes-modem, enable TCP mode with the `-t` flag. Data is sent/received using KISS framing over TCP (default port 8100).
+For use with mercury, enable TCP mode with the `-t` flag. Data is sent/received using KISS framing over TCP (default port 8100).
 
 ### Transmitter
 
@@ -48,9 +48,9 @@ $ ./receiver -t -i 192.168.1.100 -p 8100 file_to_receive 1
 ### Command Line Options
 
 ```
-  -t, --tcp         Use TCP connection to hermes-modem (default: shared memory)
-  -i, --ip IP       IP address of hermes-modem (default: 127.0.0.1)
-  -p, --port PORT   TCP port of hermes-modem (default: 8100)
+  -t, --tcp         Use TCP connection to mercury (default: shared memory)
+  -i, --ip IP       IP address of mercury (default: 127.0.0.1)
+  -p, --port PORT   TCP port of mercury (default: 8100)
   -h, --help        Show help message
 ```
 
@@ -67,11 +67,11 @@ $ ./broadcast_daemon --mode 1 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 
 Options:
 
 ```
-  -m, --mode MODE      hermes-modem mode (0..6, default 1)
+  -m, --mode MODE      mercury mode (0..6, default 1)
   -t, --tx-dir DIR     directory watched for files to transmit
   -r, --rx-dir DIR     directory where received files are written
-  -i, --ip IP          hermes-modem IP (default 127.0.0.1)
-  -p, --port PORT      hermes-modem port (default 8100)
+  -i, --ip IP          mercury IP (default 127.0.0.1)
+  -p, --port PORT      mercury broadcast port (default 8100)
   -v, --verbose        verbose logs
 ```
 
@@ -88,7 +88,7 @@ To set a finite number of transmitted frames, include `-N_frames` in the filenam
 
 Valid modulation modes range from 0 to 16 (inclusive).
 
-### hermes-modem (TCP Mode)
+### Mercury (TCP Mode)
 
 Valid modulation modes range from 0 to 6:
 
@@ -110,11 +110,11 @@ In shared memory mode, hermes-broadcast communicates with Mercury modem through 
 
 ## TCP Mode
 
-In TCP mode, hermes-broadcast acts as a TCP client connecting to hermes-modem's broadcast port. Data is framed using the KISS protocol (CMD_DATA = 0x02) for reliable packet delimiting over the TCP stream.
+In TCP mode, hermes-broadcast acts as a TCP client connecting to mercury's broadcast port. Data is framed using the KISS protocol (CMD_DATA = 0x02) for reliable packet delimiting over the TCP stream.
 
 ```
 +------------------+       KISS/TCP        +---------------+
-| hermes-broadcast | <------------------> | hermes-modem  |
+| hermes-broadcast | <------------------> | mercury       |
 |  (transmitter/   |      port 8100       | (broadcast    |
 |   receiver)      |                      |  interface)   |
 +------------------+                      +---------------+
