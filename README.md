@@ -18,9 +18,15 @@ Three binaries will be created: "transmitter", "receiver", and "broadcast_daemon
 
 # Usage
 
-## Shared Memory Mode (Mercury modem)
+## Shared Memory Mode (Mercury v1 only)
 
-Use Mercury modem in operating mode TX_SHM for the transmitter and RX_SHM for the receiver. The arguments of both programs are a file (to transmit or receive) and the modulation mode (0 to 16).
+> **Legacy.** The shared-memory path talks to `/mercury-comm`, which only
+> Mercury **v1** creates — current Mercury (`mercuryv2`) uses a different
+> segment and no longer offers `TX_SHM`/`RX_SHM` at all. Use TCP mode below
+> with any current Mercury. The mode numbering here (0..16) is v1's, and does
+> not match the modem's mode list either.
+
+Use Mercury v1 in operating mode TX_SHM for the transmitter and RX_SHM for the receiver. The arguments of both programs are a file (to transmit or receive) and the modulation mode (0 to 16).
 
 ```
 $ ./transmitter file_to_transmit 10
@@ -67,7 +73,7 @@ $ ./broadcast_daemon --mode 1 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 
 Options:
 
 ```
-  -m, --mode MODE      mercury mode (0..6, default 1)
+  -m, --mode MODE      mercury mode (0..10, default 1)
   -t, --tx-dir DIR     directory watched for files to transmit
   -r, --rx-dir DIR     directory where received files are written
   -i, --ip IP          mercury IP (default 127.0.0.1)
@@ -84,13 +90,8 @@ To set a finite number of transmitted frames, include `-N_frames` in the filenam
 
 ## Modulation Modes
 
-### Mercury Modem (Shared Memory Mode)
-
-Valid modulation modes range from 0 to 16 (inclusive).
-
-### Mercury (TCP Mode)
-
-Valid modulation modes range from 0 to 6:
+Valid modulation modes range from 0 to 10. These are the indices Mercury's
+own `mercury -l` reports, in its order:
 
 | Mode | Codec    | Payload Bytes |
 |------|----------|---------------|
@@ -101,6 +102,15 @@ Valid modulation modes range from 0 to 6:
 | 4    | DATAC13  | 14            |
 | 5    | DATAC14  | 3             |
 | 6    | FSK_LDPC | 30            |
+| 7    | DATAC15  | 30            |
+| 8    | DATAC16  | 14            |
+| 9    | DATAC17  | 1180          |
+| 10   | QAM16C2  | 1213          |
+
+Modes 9 and 10 carry more than twice DATAC1's payload and are the ones to
+reach for on a good channel; the low-payload modes (2, 4, 5, 8) are the robust
+end. Both ends must agree on the mode — there is no negotiation on the
+broadcast plane.
 
 # Architecture
 

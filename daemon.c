@@ -641,7 +641,7 @@ static void *rx_thread_main(void *arg)
 static void print_usage(const char *prog)
 {
     printf("Usage: %s [options]\n", prog);
-    printf("  -m, --mode MODE      mercury mode 0..6 (default: 1)\n");
+    printf("  -m, --mode MODE      mercury mode 0..10 (default: 1)\n");
     printf("  -t, --tx-dir DIR     TX queue directory (default: ./tx)\n");
     printf("  -r, --rx-dir DIR     RX output directory (default: ./rx)\n");
     printf("  -i, --ip IP          modem IP (default: 127.0.0.1)\n");

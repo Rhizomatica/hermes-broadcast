@@ -57,14 +57,21 @@ uint32_t mercury_frame_size[17] = { 12, 25, 37, 50, 62, 75, 100, 62, 75, 100, 74
 
 
 /****** mercury modes ******/
-#define HERMES_MODE_MAX 6 // 0 to 6, size 7
+#define HERMES_MODE_MAX 10 // 0 to 10, size 11
 
-// mercury payload_bytes_per_modem_frame for modes 0 to 6
-// Mode 0: DATAC1  - 510 bytes
-// Mode 1: DATAC3  - 126 bytes
-// Mode 2: DATAC0  -  14 bytes
-// Mode 3: DATAC4  -  54 bytes
-// Mode 4: DATAC13 -  14 bytes
-// Mode 5: DATAC14 -   3 bytes
-// Mode 6: FSK_LDPC - 30 bytes
-uint32_t hermes_frame_size[7] = { 510, 126, 14, 54, 14, 3, 30 };
+// mercury payload_bytes_per_modem_frame for modes 0 to 10.
+// These are the indices Mercury's own "-l" reports, in its order; keep this
+// table in step with it (mercury -l prints "Mode index" and
+// "payload_bytes_per_modem_frame" for each).
+// Mode  0: DATAC1   -  510 bytes
+// Mode  1: DATAC3   -  126 bytes
+// Mode  2: DATAC0   -   14 bytes
+// Mode  3: DATAC4   -   54 bytes
+// Mode  4: DATAC13  -   14 bytes
+// Mode  5: DATAC14  -    3 bytes
+// Mode  6: FSK_LDPC -   30 bytes
+// Mode  7: DATAC15  -   30 bytes
+// Mode  8: DATAC16  -   14 bytes
+// Mode  9: DATAC17  - 1180 bytes
+// Mode 10: QAM16C2  - 1213 bytes
+uint32_t hermes_frame_size[11] = { 510, 126, 14, 54, 14, 3, 30, 30, 14, 1180, 1213 };
