@@ -2,9 +2,7 @@
 
 #include <stdint.h>
 
-#define SHM_PAYLOAD_BUFFER_SIZE 131072
 #define CONFIG_PACKET_SIZE 9
-#define SHM_PAYLOAD_NAME "/mercury-comm"
 
 #define TAG_SIZE 3
 #define HERMES_SIZE 1
@@ -47,13 +45,6 @@ static inline void hermes_write_frame_header(uint8_t *frame, uint8_t packet_type
     frame[0] = (uint8_t)(((packet_type & PACKET_TYPE_MASK) << PACKET_TYPE_SHIFT) |
                          (extension & FRAME_EXT_MASK));
 }
-
-
-/****** Mercury modem modes (legacy) ******/
-#define MERCURY_MODE_MAX 16 // 0 to 16, size 17
-
-// Mercury frame sizes, no CRC enabled, modes 0 to 16.
-uint32_t mercury_frame_size[17] = { 12, 25, 37, 50, 62, 75, 100, 62, 75, 100, 74, 99, 175, 100, 174, 175, 162};
 
 
 /****** mercury modes ******/

@@ -16,7 +16,6 @@
 #include <unistd.h>
 #include <getopt.h>
 
-#include "ring_buffer_posix.h"
 #include "mercury_modes.h"
 #include "tcp_interface.h"
 
@@ -29,13 +28,7 @@ bool running;
 
 uint8_t configuration_packet[CONFIG_PACKET_SIZE];
 
-// Output mode
-typedef enum {
-    OUTPUT_SHM,
-    OUTPUT_TCP
-} output_mode_t;
-
-// Global TCP interface (used when OUTPUT_TCP mode)
+// Global TCP interface
 tcp_interface_t tcp_iface;
 static uint64_t tx_config_packets = 0;
 static uint64_t tx_payload_packets = 0;
@@ -46,8 +39,7 @@ void exit_system(int sig)
     running = false;
 }
 
-void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
-              uint32_t esi, cbuf_handle_t buffer, output_mode_t out_mode)
+void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn, uint32_t esi)
 {
     size_t packet_size = nanorq_symbol_size(rq);
     uint8_t data[packet_size + RQ_HEADER_SIZE];
@@ -67,14 +59,7 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
 
         hermes_write_frame_header(data, PACKET_RQ_PAYLOAD, 0);
 
-        if (out_mode == OUTPUT_SHM)
-        {
-            write_buffer(buffer, data, packet_size + RQ_HEADER_SIZE);
-        }
-        else // OUTPUT_TCP
-        {
-            tcp_interface_send_kiss(&tcp_iface, data, packet_size + RQ_HEADER_SIZE);
-        }
+        tcp_interface_send_kiss(&tcp_iface, data, packet_size + RQ_HEADER_SIZE);
         tx_payload_packets++;
         if ((tx_payload_packets % 100) == 0)
         {
@@ -90,14 +75,14 @@ void write_esi(nanorq *rq, struct ioctx *myio, uint8_t sbn,
     }
 }
 
-bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi, cbuf_handle_t buffer, output_mode_t out_mode)
+bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *esi)
 {
     int num_sbn = nanorq_blocks(rq);
 
     // for all blocks TODO: shuffle the sbn traversal each call
     for (int sbn = 0; sbn < num_sbn && running; sbn++)
     {
-        write_esi(rq, myio, sbn, esi[sbn], buffer, out_mode);
+        write_esi(rq, myio, sbn, esi[sbn]);
         esi[sbn]++;
 //        if (esi[sbn] > ((1 << 24) - 1))
         if (esi[sbn] > ((1 << 16) - 1))
@@ -110,28 +95,19 @@ bool write_interleaved_block_packets(nanorq *rq, struct ioctx *myio, uint32_t *e
     return true;
 }
 
-void write_configuration_packet(uint32_t frame_size, cbuf_handle_t buffer, output_mode_t out_mode)
+void write_configuration_packet(uint32_t frame_size)
 {
-    if (out_mode == OUTPUT_SHM)
-    {
-        uint8_t stuffing[frame_size];
-        memset(stuffing, 0, frame_size);
-        write_buffer(buffer, configuration_packet, CONFIG_PACKET_SIZE);
-        // stuffing bytes... could be used for something useful later on
-        if (frame_size > CONFIG_PACKET_SIZE)
-            write_buffer(buffer, stuffing, frame_size - CONFIG_PACKET_SIZE);
-    }
-    else // OUTPUT_TCP
-    {
-        // Emit a FULL modem frame: the config packet plus zero stuffing out to
-        // frame_size.  The payload path sends packet_size + RQ_HEADER_SIZE,
-        // which is the same total, and our receiver accepts a TCP frame only
-        // when its length is exactly frame_size.
-        uint8_t full_packet[frame_size];
-        memset(full_packet, 0, frame_size);
-        memcpy(full_packet, configuration_packet, CONFIG_PACKET_SIZE);
-        tcp_interface_send_kiss(&tcp_iface, full_packet, (int)frame_size);
-    }
+    // Emit a FULL modem frame: the config packet itself plus zero stuffing out
+    // to frame_size.  The payload path sends packet_size + RQ_HEADER_SIZE,
+    // which is the same total, and our receiver accepts a TCP frame only when
+    // its length is exactly frame_size.
+    uint8_t full_packet[frame_size];
+
+    memset(full_packet, 0, frame_size);
+    memcpy(full_packet, configuration_packet, CONFIG_PACKET_SIZE);
+
+    tcp_interface_send_kiss(&tcp_iface, full_packet, (int)frame_size);
+
     tx_config_packets++;
     if (tx_config_packets <= 10 || (tx_config_packets % 50) == 0)
     {
@@ -145,25 +121,26 @@ void print_usage(const char *prog_name)
 {
     printf("Usage: %s [options] file_to_transmit modulation_mode\n", prog_name);
     printf("\nOptions:\n");
-    printf("  -t, --tcp         Use TCP output to mercury (default: shared memory)\n");
+    printf("  -t, --tcp         Accepted for compatibility (TCP is the only output)\n");
     printf("  -i, --ip IP       IP address of mercury (default: %s)\n", DEFAULT_MODEM_IP);
     printf("  -p, --port PORT   TCP port of mercury (default: %d)\n", DEFAULT_MODEM_PORT);
     printf("  -h, --help        Show this help message\n");
-    printf("\nModulation modes:\n");
-    printf("  Shared memory (Mercury): 0-16\n");
-    printf("  TCP (mercury):      0-6\n");
-    printf("    Mode 0: DATAC1  (510 bytes)\n");
-    printf("    Mode 1: DATAC3  (126 bytes)\n");
-    printf("    Mode 2: DATAC0  (14 bytes)\n");
-    printf("    Mode 3: DATAC4  (54 bytes)\n");
-    printf("    Mode 4: DATAC13 (14 bytes)\n");
-    printf("    Mode 5: DATAC14 (3 bytes)\n");
-    printf("    Mode 6: FSK_LDPC (30 bytes)\n");
+    printf("\nModulation modes (mercury payload bytes per modem frame):\n");
+    printf("    Mode  0: DATAC1   -  510 bytes\n");
+    printf("    Mode  1: DATAC3   -  126 bytes\n");
+    printf("    Mode  2: DATAC0   -   14 bytes\n");
+    printf("    Mode  3: DATAC4   -   54 bytes\n");
+    printf("    Mode  4: DATAC13  -   14 bytes\n");
+    printf("    Mode  5: DATAC14  -    3 bytes\n");
+    printf("    Mode  6: FSK_LDPC -   30 bytes\n");
+    printf("    Mode  7: DATAC15  -   30 bytes\n");
+    printf("    Mode  8: DATAC16  -   14 bytes\n");
+    printf("    Mode  9: DATAC17  - 1180 bytes\n");
+    printf("    Mode 10: QAM16C2  - 1213 bytes\n");
 }
 
 int main(int argc, char *argv[]) {
 
-    output_mode_t out_mode = OUTPUT_SHM;
     char *tcp_ip = DEFAULT_MODEM_IP;
     int tcp_port = DEFAULT_MODEM_PORT;
 
@@ -182,7 +159,7 @@ int main(int argc, char *argv[]) {
         switch (opt)
         {
         case 't':
-            out_mode = OUTPUT_TCP;
+            // TCP is the only output; accepted so existing scripts keep working
             break;
         case 'i':
             tcp_ip = optarg;
@@ -208,14 +185,12 @@ int main(int argc, char *argv[]) {
     char *infile = argv[optind];
     int mod_mode = strtol(argv[optind + 1], NULL, 10);
 
-    // Validate mode based on output type
-    int max_mode = (out_mode == OUTPUT_TCP) ? HERMES_MODE_MAX : MERCURY_MODE_MAX;
-    uint32_t *frame_sizes = (out_mode == OUTPUT_TCP) ? hermes_frame_size : mercury_frame_size;
+    int max_mode = HERMES_MODE_MAX;
+    uint32_t *frame_sizes = hermes_frame_size;
 
     if (mod_mode < 0 || mod_mode > max_mode)
     {
-        printf("Invalid mode %d. Valid modes range from 0 to %d for %s.\n",
-               mod_mode, max_mode, (out_mode == OUTPUT_TCP) ? "TCP/mercury" : "SHM/Mercury");
+        printf("Invalid mode %d. Valid modes range from 0 to %d.\n", mod_mode, max_mode);
         return -1;
     }
 
@@ -281,40 +256,23 @@ int main(int argc, char *argv[]) {
 
     hermes_write_frame_header(configuration_packet, PACKET_RQ_CONFIG, 0);
 
-    cbuf_handle_t buffer = NULL;
-
     // Initialize output interface
-    if (out_mode == OUTPUT_TCP)
+    tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
+    if (!tcp_interface_connect(&tcp_iface))
     {
-        tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
-        if (!tcp_interface_connect(&tcp_iface))
-        {
-            fprintf(stderr, "Failed to connect to mercury at %s:%d\n", tcp_ip, tcp_port);
-            nanorq_free(rq);
-            myio->destroy(myio);
-            return -1;
-        }
-        printf("Output mode: TCP to mercury (%s:%d)\n", tcp_ip, tcp_port);
+        fprintf(stderr, "Failed to connect to mercury at %s:%d\n", tcp_ip, tcp_port);
+        nanorq_free(rq);
+        myio->destroy(myio);
+        return -1;
     }
-    else
-    {
-        buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
-        if (buffer == NULL)
-        {
-            fprintf(stderr, "Failed to connect to shared memory\n");
-            nanorq_free(rq);
-            myio->destroy(myio);
-            return -1;
-        }
-        printf("Output mode: Shared memory\n");
-    }
+    printf("Output mode: TCP to mercury (%s:%d)\n", tcp_ip, tcp_port);
 
     while(running)
     {
         // 1 configuration packet per each sbn "slice"
-        write_configuration_packet(frame_size, buffer, out_mode);
+        write_configuration_packet(frame_size);
 
-        if (write_interleaved_block_packets(rq, myio, esi, buffer, out_mode) == false)
+        if (write_interleaved_block_packets(rq, myio, esi) == false)
             running = false;
     }
 
@@ -324,14 +282,7 @@ int main(int argc, char *argv[]) {
     nanorq_free(rq);
     myio->destroy(myio);
 
-    if (out_mode == OUTPUT_TCP)
-    {
-        tcp_interface_disconnect(&tcp_iface);
-    }
-    else
-    {
-        circular_buf_free_shm(buffer);
-    }
+    tcp_interface_disconnect(&tcp_iface);
 
     return 0;
 }

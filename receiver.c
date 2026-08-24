@@ -15,7 +15,6 @@
 #include <getopt.h>
 #include <string.h>
 
-#include "ring_buffer_posix.h"
 #include "mercury_modes.h"
 #include "tcp_interface.h"
 #include "kiss.h"
@@ -33,13 +32,7 @@ bool block_decoded[MAX_BLOCKS];
 
 bool running;
 
-// Input mode
-typedef enum {
-    INPUT_SHM,
-    INPUT_TCP
-} input_mode_t;
-
-// Global TCP interface (used when INPUT_TCP mode)
+// Global TCP interface
 tcp_interface_t tcp_iface;
 
 void exit_system(int sig)
@@ -105,71 +98,54 @@ void print_usage(const char *prog_name)
 {
     printf("Usage: %s [options] file_to_receive modulation_mode\n", prog_name);
     printf("\nOptions:\n");
-    printf("  -t, --tcp         Use TCP input from mercury (default: shared memory)\n");
+    printf("  -t, --tcp         Accepted for compatibility (TCP is the only input)\n");
     printf("  -i, --ip IP       IP address of mercury (default: %s)\n", DEFAULT_MODEM_IP);
     printf("  -p, --port PORT   TCP port of mercury (default: %d)\n", DEFAULT_MODEM_PORT);
     printf("  -h, --help        Show this help message\n");
-    printf("\nModulation modes:\n");
-    printf("  Shared memory (Mercury): 0-16\n");
-    printf("  TCP (mercury):      0-6\n");
-    printf("    Mode 0: DATAC1  (510 bytes)\n");
-    printf("    Mode 1: DATAC3  (126 bytes)\n");
-    printf("    Mode 2: DATAC0  (14 bytes)\n");
-    printf("    Mode 3: DATAC4  (54 bytes)\n");
-    printf("    Mode 4: DATAC13 (14 bytes)\n");
-    printf("    Mode 5: DATAC14 (3 bytes)\n");
-    printf("    Mode 6: FSK_LDPC (30 bytes)\n");
+    printf("\nModulation modes (mercury payload bytes per modem frame):\n");
+    printf("    Mode  0: DATAC1   -  510 bytes\n");
+    printf("    Mode  1: DATAC3   -  126 bytes\n");
+    printf("    Mode  2: DATAC0   -   14 bytes\n");
+    printf("    Mode  3: DATAC4   -   54 bytes\n");
+    printf("    Mode  4: DATAC13  -   14 bytes\n");
+    printf("    Mode  5: DATAC14  -    3 bytes\n");
+    printf("    Mode  6: FSK_LDPC -   30 bytes\n");
+    printf("    Mode  7: DATAC15  -   30 bytes\n");
+    printf("    Mode  8: DATAC16  -   14 bytes\n");
+    printf("    Mode  9: DATAC17  - 1180 bytes\n");
+    printf("    Mode 10: QAM16C2  - 1213 bytes\n");
 }
 
-// Read a frame from input (SHM or TCP)
+// Read a KISS-framed frame from mercury
 // Returns 1 on success, 0 if no data available, -1 on error
-int read_frame_from_input(input_mode_t in_mode, cbuf_handle_t buffer, uint8_t *data_frame, uint32_t frame_size, uint32_t *rx_frame_len)
+int read_frame_from_input(uint8_t *data_frame, uint32_t frame_size, uint32_t *rx_frame_len)
 {
     if (rx_frame_len)
         *rx_frame_len = 0;
 
-    if (in_mode == INPUT_SHM)
+    int frame_len = tcp_interface_recv_kiss(&tcp_iface, data_frame);
+
+    if (frame_len < 0)
+        return -1;  // Error or disconnected
+
+    if (frame_len == 0)
+        return 0;   // No complete frame yet
+
+    if ((uint32_t)frame_len != frame_size)
     {
-        if (size_buffer(buffer) < frame_size)
-        {
-            return 0; // No data available
-        }
-        read_buffer(buffer, data_frame, frame_size);
-        if (rx_frame_len)
-            *rx_frame_len = frame_size;
-        return 1;
+        fprintf(stderr, "Discarding unexpected TCP frame length %d (expected %u)\n",
+                frame_len, frame_size);
+        return 0;
     }
-    else // INPUT_TCP
-    {
-        // For TCP, we receive KISS-framed data
-        int frame_len = tcp_interface_recv_kiss(&tcp_iface, data_frame);
-        if (frame_len > 0)
-        {
-            // Validate frame size
-            if ((uint32_t)frame_len == frame_size)
-            {
-                if (rx_frame_len)
-                    *rx_frame_len = (uint32_t)frame_len;
-                return 1;
-            }
-            fprintf(stderr, "Discarding unexpected TCP frame length %d (expected %u)\n",
-                    frame_len, frame_size);
-            return 0;
-        }
-        else if (frame_len == 0)
-        {
-            return 0; // No complete frame yet
-        }
-        else
-        {
-            return -1; // Error or disconnected
-        }
-    }
+
+    if (rx_frame_len)
+        *rx_frame_len = (uint32_t)frame_len;
+
+    return 1;
 }
 
 int main(int argc, char *argv[])
 {
-    input_mode_t in_mode = INPUT_SHM;
     char *tcp_ip = DEFAULT_MODEM_IP;
     int tcp_port = DEFAULT_MODEM_PORT;
 
@@ -188,7 +164,7 @@ int main(int argc, char *argv[])
         switch (opt)
         {
         case 't':
-            in_mode = INPUT_TCP;
+            // TCP is the only input; accepted so existing scripts keep working
             break;
         case 'i':
             tcp_ip = optarg;
@@ -214,14 +190,12 @@ int main(int argc, char *argv[])
     char *outfile = argv[optind];
     int mod_mode = strtol(argv[optind + 1], NULL, 10);
 
-    // Validate mode based on input type
-    int max_mode = (in_mode == INPUT_TCP) ? HERMES_MODE_MAX : MERCURY_MODE_MAX;
-    uint32_t *frame_sizes = (in_mode == INPUT_TCP) ? hermes_frame_size : mercury_frame_size;
+    int max_mode = HERMES_MODE_MAX;
+    uint32_t *frame_sizes = hermes_frame_size;
 
     if (mod_mode < 0 || mod_mode > max_mode)
     {
-        printf("Invalid mode %d. Valid modes range from 0 to %d for %s.\n",
-               mod_mode, max_mode, (in_mode == INPUT_TCP) ? "TCP/mercury" : "SHM/Mercury");
+        printf("Invalid mode %d. Valid modes range from 0 to %d.\n", mod_mode, max_mode);
         return -1;
     }
 
@@ -257,31 +231,15 @@ int main(int argc, char *argv[])
     bool have_more_symbols = false;
 
     nanorq *rq = NULL;
-    cbuf_handle_t buffer = NULL;
-
     // Initialize input interface
-    if (in_mode == INPUT_TCP)
+    tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
+    if (!tcp_interface_connect(&tcp_iface))
     {
-        tcp_interface_init(&tcp_iface, tcp_ip, tcp_port);
-        if (!tcp_interface_connect(&tcp_iface))
-        {
-            fprintf(stderr, "Failed to connect to mercury at %s:%d\n", tcp_ip, tcp_port);
-            myio->destroy(myio);
-            return -1;
-        }
-        printf("Input mode: TCP from mercury (%s:%d)\n", tcp_ip, tcp_port);
+        fprintf(stderr, "Failed to connect to mercury at %s:%d\n", tcp_ip, tcp_port);
+        myio->destroy(myio);
+        return -1;
     }
-    else
-    {
-        buffer = circular_buf_connect_shm(SHM_PAYLOAD_BUFFER_SIZE, SHM_PAYLOAD_NAME);
-        if (buffer == NULL)
-        {
-            fprintf(stderr, "Shared memory not created\n");
-            myio->destroy(myio);
-            return -1;
-        }
-        printf("Input mode: Shared memory\n");
-    }
+    printf("Input mode: TCP from mercury (%s:%d)\n", tcp_ip, tcp_port);
 
 #ifdef ENABLE_LOOP
 try_again:
@@ -300,7 +258,7 @@ try_again:
     uint64_t payload_before_config = 0;
     while (running)
     {
-        int read_result = read_frame_from_input(in_mode, buffer, data_frame, frame_size, &rx_frame_len);
+        int read_result = read_frame_from_input(data_frame, frame_size, &rx_frame_len);
         if (read_result == 0)
         {
             usleep(100000); // 0.1s - shorter for TCP mode
@@ -425,7 +383,6 @@ try_again:
                     }
                 }
             }
-            // write_configuration_packets(buffer);
             bool file_received = true;
             for (int i = 0; i < num_sbn; i++)
             {
@@ -486,14 +443,7 @@ success:
 #endif
     myio->destroy(myio);
 
-    if (in_mode == INPUT_TCP)
-    {
-        tcp_interface_disconnect(&tcp_iface);
-    }
-    else
-    {
-        circular_buf_free_shm(buffer);
-    }
+    tcp_interface_disconnect(&tcp_iface);
 
     return 0;
 }

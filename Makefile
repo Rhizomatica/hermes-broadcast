@@ -41,7 +41,7 @@ raptorq/lib/uvec.o\
 raptorq/deps/obl/oblas_lite.o
 
 # Common objects for TCP/KISS support
-COMMON_OBJ = shm_posix.o ring_buffer_posix.o crc6.o kiss.o tcp_interface.o
+COMMON_OBJ = crc6.o kiss.o tcp_interface.o
 
 all: transmitter receiver broadcast_daemon raptorq/libnanorq.a
 
