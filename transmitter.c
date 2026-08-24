@@ -125,11 +125,21 @@ void write_configuration_packet(int packet_size, cbuf_handle_t buffer, output_mo
     }
     else // OUTPUT_TCP
     {
-        // For TCP, send full frame with stuffing
-        uint8_t full_packet[packet_size];
-        memset(full_packet, 0, packet_size);
+        // Send a FULL modem frame with stuffing.  packet_size is the payload
+        // budget (frame_size - RQ_HEADER_SIZE), so sending packet_size alone
+        // puts RQ_HEADER_SIZE too few bytes on the wire -- which is what the
+        // payload path avoids by sending packet_size + RQ_HEADER_SIZE.
+        //
+        // A short frame only ever worked because Mercury zero-pads an
+        // undersized broadcast frame back up to frame_size.  Our own receiver
+        // then requires exactly frame_size and discards anything else, so the
+        // config packet's delivery depended on that padding.  Emit the full
+        // frame here instead of relying on the transport to repair it.
+        size_t frame_len = (size_t)packet_size + RQ_HEADER_SIZE;
+        uint8_t full_packet[frame_len];
+        memset(full_packet, 0, frame_len);
         memcpy(full_packet, configuration_packet, CONFIG_PACKET_SIZE);
-        tcp_interface_send_kiss(&tcp_iface, full_packet, packet_size);
+        tcp_interface_send_kiss(&tcp_iface, full_packet, (int)frame_len);
     }
     tx_config_packets++;
     if (tx_config_packets <= 10 || (tx_config_packets % 50) == 0)
