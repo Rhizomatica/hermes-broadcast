@@ -211,6 +211,18 @@ int main(int argc, char *argv[]) {
     }
 
     uint32_t frame_size = frame_sizes[mod_mode];
+
+    // RaptorQ needs RQ_HEADER_SIZE bytes of tag per frame, and the configuration
+    // packet is CONFIG_PACKET_SIZE bytes.  A mode whose frame is smaller than
+    // that cannot carry the broadcast protocol at all -- without this check
+    // packet_size underflows and the config packet overruns its buffer.
+    if (frame_size <= RQ_HEADER_SIZE || frame_size < CONFIG_PACKET_SIZE)
+    {
+        printf("Mode %d carries only %u bytes per frame; broadcast needs at least %d.\n",
+               mod_mode, frame_size, CONFIG_PACKET_SIZE);
+        return -1;
+    }
+
     size_t packet_size = frame_size - (uint32_t) RQ_HEADER_SIZE; // T
 
     printf("Mode: %d, Frame size: %u bytes, Packet size: %zu bytes\n", mod_mode, frame_size, packet_size);

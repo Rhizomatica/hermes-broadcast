@@ -38,7 +38,7 @@ extern "C" {
 #define CMD_RQ_CONFIG 0x03 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ config
 #define CMD_RQ_PAYLOAD 0x04 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ payload
 
-#define MAX_PAYLOAD 756 // ~ 18 frames at VARA Level 4
+#define MAX_PAYLOAD 1213 // largest Mercury broadcast frame (QAM16C2, mode 10)
 
 // KISS state structure for reentrant/thread-safe operation
 typedef struct {

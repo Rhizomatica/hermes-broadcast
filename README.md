@@ -92,7 +92,7 @@ own `mercury -l` reports, in its order:
 | 2    | DATAC0   | 14            |
 | 3    | DATAC4   | 54            |
 | 4    | DATAC13  | 14            |
-| 5    | DATAC14  | 3             |
+| 5    | DATAC14  | 3             | *(too small -- see below)* |
 | 6    | FSK_LDPC | 30            |
 | 7    | DATAC15  | 30            |
 | 8    | DATAC16  | 14            |
@@ -103,6 +103,14 @@ Modes 9 and 10 carry more than twice DATAC1's payload and are the ones to
 reach for on a good channel; the low-payload modes (2, 4, 5, 8) are the robust
 end. Both ends must agree on the mode — there is no negotiation on the
 broadcast plane.
+
+Mode 5 cannot carry broadcast at all: every frame needs a 4-byte RaptorQ tag
+and the configuration packet is 9 bytes, so DATAC14's 3-byte frame leaves
+nothing over. Both binaries reject it.
+
+Modes 9 and 10 exceed the old 756-byte KISS payload cap, so they need a Mercury
+build whose `MAX_PAYLOAD` covers the largest broadcast frame (1213). An older
+Mercury rejects them with "Invalid broadcast frame size".
 
 # Architecture
 

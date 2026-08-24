@@ -208,6 +208,15 @@ int main(int argc, char *argv[])
 
     uint32_t frame_size = frame_sizes[mod_mode];
 
+    // See the transmitter: a frame smaller than the RaptorQ tag plus the
+    // configuration packet cannot carry the broadcast protocol.
+    if (frame_size <= RQ_HEADER_SIZE || frame_size < CONFIG_PACKET_SIZE)
+    {
+        printf("Mode %d carries only %u bytes per frame; broadcast needs at least %d.\n",
+               mod_mode, frame_size, CONFIG_PACKET_SIZE);
+        return -1;
+    }
+
     printf("Mode: %d, Frame size: %u bytes\n", mod_mode, frame_size);
 
     running = true;
