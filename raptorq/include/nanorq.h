@@ -33,6 +33,26 @@ void nanorq_free(nanorq *rq);
 // returns basic parameters to initialize a decoder
 uint64_t nanorq_oti_common(nanorq *rq);
 
+/*
+ * HERMES size-optimized helpers.  LOCAL ADDITION -- not upstream nanorq.
+ *
+ * Mercury's broadcast frames are tiny (the robust modes carry 14 bytes), so the
+ * standard 8-byte common OTI, 4-byte scheme-specific OTI and 4-byte payload tag
+ * do not fit.  These write the same fields in the minimum bytes that actually
+ * carry information:
+ *
+ *   tag_reduced                 3 B  sbn + 16-bit esi   (vs 4)
+ *   oti_common_reduced          5 B  24-bit F + 16-bit T-1 (vs 8)
+ *   oti_scheme_specific_align1  3 B  Z-1 + 16-bit N-1   (vs 4; Al is always 1)
+ *
+ * The ESI is capped at 16 bits as a consequence -- see nanorq_set_max_esi() use
+ * in transmitter.c.  Round-tripped by rq_roundtrip_test.c; if you re-vendor
+ * nanorq, re-apply these and re-run that test.
+ */
+uint8_t *nanorq_tag_reduced(uint8_t sbn, uint32_t esi, uint8_t *buffer);
+uint8_t *nanorq_oti_scheme_specific_align1(nanorq *rq, uint8_t *buffer);
+uint8_t *nanorq_oti_common_reduced(nanorq *rq, uint8_t *buffer);
+
 // returns extended parameters to initialize a decoder
 uint32_t nanorq_oti_scheme_specific(nanorq *rq);
 
@@ -48,8 +68,20 @@ size_t nanorq_blocks(nanorq *rq);
 // returns the number of symbol rows per sbn block
 size_t nanorq_block_symbols(nanorq *rq, uint8_t sbn);
 
-// returns a compound symbol identifier comprised of sbn and esi
+/*
+ * Tag parsing
+ */
 uint32_t nanorq_tag(uint8_t sbn, uint32_t esi);
+
+/*
+ * TSNC Recoding API
+ */
+int nanorq_decoder_add_recoded_symbol(nanorq *rq, void *data, uint32_t tag,
+                                      const uint8_t *coefs, struct ioctx *io);
+
+bool nanorq_generate_recoded_symbol(nanorq *rq, struct ioctx *io, uint8_t sbn,
+                                    uint32_t esi, uint8_t *out_coefs,
+                                    void *out_payload);
 
 // return the max number of blocks allowed
 size_t nanorq_max_blocks(nanorq *rq);
@@ -85,11 +117,6 @@ size_t nanorq_num_repair(nanorq *rq, uint8_t sbn);
 
 // return whether or not sbn was successfully repaired
 bool nanorq_repair_block(nanorq *rq, struct ioctx *io, uint8_t sbn);
-
-// HERMES size-optimized helpers.
-uint8_t *nanorq_tag_reduced(uint8_t sbn, uint32_t esi, uint8_t *buffer);
-uint8_t *nanorq_oti_scheme_specific_align1(nanorq *rq, uint8_t *buffer);
-uint8_t *nanorq_oti_common_reduced(nanorq *rq, uint8_t *buffer);
 
 #ifdef __cplusplus
 }

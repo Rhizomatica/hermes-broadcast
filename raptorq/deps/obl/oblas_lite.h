@@ -5,6 +5,11 @@
 #include <stddef.h>
 
 #include "gf2_8_tables.h"
+#include "oblas_common.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct oblas_impl {
     void (*axpy)(uint8_t *a, uint8_t *b, uint8_t u, unsigned k);
@@ -17,13 +22,11 @@ struct oblas_impl {
 void oblas_get_impl(struct oblas_impl *impl);
 
 typedef uint8_t u8;
+typedef uint16_t u16;
 typedef uint32_t u32;
 
-void obl_swap(u8 *a, u8 *b, unsigned k);
-
-#ifndef NANORQ_NO_LIBC
-void *obl_alloc(size_t num_rows, size_t row_size, size_t alignment);
-void obl_free(void *ptr);
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* OBLAS_LITE_H */

@@ -38,12 +38,33 @@ raptorq/lib/rand.o\
 raptorq/lib/sopi.o\
 raptorq/lib/tuple.o\
 raptorq/lib/uvec.o\
-raptorq/deps/obl/oblas_lite.o
+raptorq/deps/obl/oblas_lite.o\
+raptorq/deps/obl/oblas_common.o
 
 # Common objects for TCP/KISS support
 COMMON_OBJ = crc6.o kiss.o tcp_interface.o
 
 all: transmitter receiver broadcast_daemon raptorq/libnanorq.a
+
+# Regression test for the nanorq re-vendor.  The vendored copy carries three
+# HERMES-local helpers (reduced OTI/tag) that upstream does not; this drives the
+# real wire layout through encode -> loss -> decode and requires a byte-identical
+# file.  Run it after any nanorq update.
+#   make test        round-trip only
+#   make test-e2e    also the real transmitter/receiver over a loopback relay
+rq_roundtrip_test: rq_roundtrip_test.c raptorq/libnanorq.a
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ rq_roundtrip_test.c raptorq/libnanorq.a $(LDFLAGS) -lm
+
+.PHONY: test test-e2e
+test: rq_roundtrip_test
+	./rq_roundtrip_test
+
+test-e2e: all
+	./bcast_loopback_test.sh 0 20000 18201
+	./bcast_loopback_test.sh 1 20000 18202
+	./bcast_loopback_test.sh 9 60000 18203
+	./bcast_loopback_test.sh 10 60000 18204
+
 
 receiver.o: receiver.c tcp_interface.h kiss.h
 
