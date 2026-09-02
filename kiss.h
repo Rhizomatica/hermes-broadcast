@@ -34,9 +34,24 @@ extern "C" {
 #define CMD_UNKNOWN 0xFE
 #define CMD_AX25 0x00 //  AX25 Frame (standard) in VARA
 #define CMD_AX25CALLSIGN 0x01 // AX25 Frame (7 chrs Call Signs) in VARA
-#define CMD_DATA 0x02 // Raw/unformatted KISS payload; current Mercury TCP framing uses this
-#define CMD_RQ_CONFIG 0x03 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ config
-#define CMD_RQ_PAYLOAD 0x04 // Reserved/legacy KISS command value; current TCP framing does not use it for RaptorQ payload
+#define CMD_DATA 0x02 // Raw/unformatted KISS payload
+
+/* "The payload is already exactly one modem frame -- transmit it untouched."
+ *
+ * Kept in step with Mercury's datalink_broadcast/kiss.h; see WIRE-FORMAT.md §1.
+ * Without it Mercury has to work out for itself whether a payload is a message
+ * to frame or a frame to send, from the payload's own first byte -- which the
+ * sender chooses.  Saying it outright removes the guess.
+ *
+ * CMD_DATA remains fully supported and is what older builds of this project
+ * send; Mercury still infers correctly for it. */
+#define CMD_MODEM_FRAME 0x03
+
+/* The RaptorQ packet type lives in the FRAME's header byte (see WIRE-FORMAT.md
+ * §2), never in the KISS command.  These two names are kept only so older code
+ * referring to them still compiles. */
+#define CMD_RQ_CONFIG 0x03
+#define CMD_RQ_PAYLOAD 0x04
 
 #define MAX_PAYLOAD 1213 // largest Mercury broadcast frame (QAM16C2, mode 10)
 

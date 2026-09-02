@@ -46,6 +46,25 @@ simulated HF path.
 **Both stations must use the same modulation mode.** There is no negotiation on
 the broadcast plane.
 
+## KISS command: declare what you are sending
+
+Everything this project puts on Mercury's broadcast port is one modem frame, so
+it is sent with KISS command **`0x03` (`CMD_MODEM_FRAME`)** — "already a modem
+frame, transmit it untouched".
+
+Mercury frames anything sent under another command as a *message*, prepending
+its own header and a 2-byte length prefix and truncating the payload by 3 bytes
+to make room. For a modem frame that is fatal: the far side receives 3 bytes
+short and discards it.
+
+Mercury used to infer this from the payload's first byte, and that inference has
+been removed — it could not be made correct, because those bytes belong to the
+sender. See [WIRE-FORMAT.md](WIRE-FORMAT.md) §1.
+
+> **If you are updating one side, update both.** Builds of this project older
+> than this change send `CMD_DATA`, which a current Mercury treats as a message.
+> `transmitter`, `receiver` and `broadcast_daemon` all now send `0x03`.
+
 ## Tests
 
 ```
