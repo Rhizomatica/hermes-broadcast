@@ -2,7 +2,63 @@
 
 High-frequency Emergency and Rural Multimedia Exchange System (HERMES) software for data broadcast over HF. Supports Mercury (https://github.com/Rhizomatica/mercury) modem.
 
-Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ implementation: https://github.com/sleepybishop/nanorq/).
+Data carousel mechanism implemented using RaptorQ fountain code (NanoRQ
+implementation: https://github.com/sleepybishop/nanorq/).
+
+**The wire format is specified byte-exactly in [WIRE-FORMAT.md](WIRE-FORMAT.md)**,
+which is kept identical in this repository and in Mercury. Read it before
+changing any framing, tag or OTI encoding: deployed stations depend on it.
+
+## Two frame formats
+
+This repository contains two, and they do **not** interoperate with each other:
+
+| binaries | format | notes |
+|---|---|---|
+| `broadcast_daemon` | **joint** — every frame carries the configuration | current; what Mercury implements |
+| `transmitter` / `receiver` | **split** — a separate periodic configuration frame | legacy; kept working |
+
+The joint format costs 8 more bytes per frame and is worth it on a broadcast
+channel: there is no return path, so a receiver tunes in at an arbitrary moment
+and with the split format can decode nothing at all until the next
+configuration frame happens to come round. With the joint format it starts on
+the first frame it hears.
+
+New work should use the joint format.
+
+## Interoperating with Mercury
+
+Mercury implements the joint format natively, so a Mercury station and a
+`broadcast_daemon` station exchange files in both directions. Mercury
+additionally wraps the file in a small **bundle** that carries its original
+filename (WIRE-FORMAT.md §7); this project does not, and names what it receives
+`broadcast_<timestamp>.bin`. Neither side rejects the other's payload:
+
+| sender | receiver | result |
+|---|---|---|
+| `broadcast_daemon` | Mercury | file saved as `broadcast_<timestamp>.bin` |
+| Mercury | `broadcast_daemon` | file saved as `broadcast_<timestamp>.bin`, contents are the bundle |
+| `transmitter` | `receiver` | works, legacy format |
+
+Verified by running the real binaries at each end of two Mercury modems over a
+simulated HF path.
+
+**Both stations must use the same modulation mode.** There is no negotiation on
+the broadcast plane.
+
+## Tests
+
+```
+make test        # RaptorQ round-trip through the reduced OTI/tag path
+make test-e2e    # the real transmitter and receiver over a loopback relay
+```
+
+`make test` matters most after re-vendoring nanorq: the vendored copy carries
+three HERMES-local helpers (`nanorq_tag_reduced`, `nanorq_oti_common_reduced`,
+`nanorq_oti_scheme_specific_align1`) that upstream does not have, and losing
+them would not necessarily fail a build — a subtly different byte layout
+encodes fine and simply never decodes on the far side. The test drives the real
+wire layout through encode, loss and decode and requires a byte-identical file.
 
 # Compilation
 
