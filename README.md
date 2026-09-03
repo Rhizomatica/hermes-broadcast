@@ -144,7 +144,7 @@ $ ./broadcast_daemon --mode 1 --tx-dir ./tx --rx-dir ./rx --ip 127.0.0.1 --port 
 Options:
 
 ```
-  -m, --mode MODE      mercury mode (0..10, default 1)
+  -m, --mode MODE      mercury mode (0..11, default 1)
   -t, --tx-dir DIR     directory watched for files to transmit
   -r, --rx-dir DIR     directory where received files are written
   -i, --ip IP          mercury IP (default 127.0.0.1)
@@ -161,7 +161,7 @@ To set a finite number of transmitted frames, include `-N_frames` in the filenam
 
 ## Modulation Modes
 
-Valid modulation modes range from 0 to 10. These are the indices Mercury's
+Valid modulation modes range from 0 to 11. These are the indices Mercury's
 own `mercury -l` reports, in its order:
 
 | Mode | Codec    | Payload Bytes |
@@ -177,6 +177,7 @@ own `mercury -l` reports, in its order:
 | 8    | DATAC16  | 14            |
 | 9    | DATAC17  | 1180          |
 | 10   | QAM16C2  | 1213          |
+| 11   | MFSK     | 98            |
 
 Modes 9 and 10 carry more than twice DATAC1's payload and are the ones to
 reach for on a good channel; the low-payload modes (2, 4, 5, 8) are the robust

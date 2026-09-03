@@ -48,9 +48,9 @@ static inline void hermes_write_frame_header(uint8_t *frame, uint8_t packet_type
 
 
 /****** mercury modes ******/
-#define HERMES_MODE_MAX 10 // 0 to 10, size 11
+#define HERMES_MODE_MAX 11 // 0 to 11, size 12
 
-// mercury payload_bytes_per_modem_frame for modes 0 to 10.
+// mercury payload_bytes_per_modem_frame for modes 0 to 11.
 // These are the indices Mercury's own "-l" reports, in its order; keep this
 // table in step with it (mercury -l prints "Mode index" and
 // "payload_bytes_per_modem_frame" for each).
@@ -65,4 +65,9 @@ static inline void hermes_write_frame_header(uint8_t *frame, uint8_t packet_type
 // Mode  8: DATAC16  -   14 bytes
 // Mode  9: DATAC17  - 1180 bytes
 // Mode 10: QAM16C2  - 1213 bytes
-uint32_t hermes_frame_size[11] = { 510, 126, 14, 54, 14, 3, 30, 30, 14, 1180, 1213 };
+// Mode 11: MFSK     -   98 bytes
+//
+// Mode 11 is Mercury's own MFSK fringe modem, not a FreeDV mode.  It was
+// appended and never inserted: these indices are wire format, so a receiver
+// built before it existed still reads modes 0-10 correctly.
+uint32_t hermes_frame_size[12] = { 510, 126, 14, 54, 14, 3, 30, 30, 14, 1180, 1213, 98 };
