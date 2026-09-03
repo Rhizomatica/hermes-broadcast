@@ -29,15 +29,19 @@ New work should use the joint format.
 ## Interoperating with Mercury
 
 Mercury implements the joint format natively, so a Mercury station and a
-`broadcast_daemon` station exchange files in both directions. Mercury
-additionally wraps the file in a small **bundle** that carries its original
-filename (WIRE-FORMAT.md §7); this project does not, and names what it receives
-`broadcast_<timestamp>.bin`. Neither side rejects the other's payload:
+`broadcast_daemon` station exchange files in both directions.
+
+Mercury wraps a file it sends in a small **bundle** carrying the original
+filename (WIRE-FORMAT.md §7). `broadcast_daemon` now unwraps one when it finds
+one, so a file sent from Mercury arrives under the name the sender gave it; an
+object that is not a bundle -- which is what this project's own transmitters
+send -- keeps the `broadcast_<timestamp>.bin` name and is written unchanged. A
+decode that succeeded is never discarded or renamed away.
 
 | sender | receiver | result |
 |---|---|---|
-| `broadcast_daemon` | Mercury | file saved as `broadcast_<timestamp>.bin` |
-| Mercury | `broadcast_daemon` | file saved as `broadcast_<timestamp>.bin`, contents are the bundle |
+| `broadcast_daemon` | Mercury | file saved as `broadcast_<timestamp>.bin` (no bundle sent) |
+| Mercury | `broadcast_daemon` | file saved under **its original name**, unwrapped from the bundle |
 | `transmitter` | `receiver` | works, legacy format |
 
 Verified by running the real binaries at each end of two Mercury modems over a

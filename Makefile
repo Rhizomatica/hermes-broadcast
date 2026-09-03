@@ -42,7 +42,7 @@ raptorq/deps/obl/oblas_lite.o\
 raptorq/deps/obl/oblas_common.o
 
 # Common objects for TCP/KISS support
-COMMON_OBJ = crc6.o kiss.o tcp_interface.o
+COMMON_OBJ = crc6.o kiss.o tcp_interface.o bundle.o
 
 all: transmitter receiver broadcast_daemon raptorq/libnanorq.a
 
@@ -56,8 +56,12 @@ rq_roundtrip_test: rq_roundtrip_test.c raptorq/libnanorq.a
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ rq_roundtrip_test.c raptorq/libnanorq.a $(LDFLAGS) -lm
 
 .PHONY: test test-e2e
-test: rq_roundtrip_test
+bundle_test: bundle_test.c bundle.c bundle.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ bundle_test.c bundle.c $(LDFLAGS)
+
+test: rq_roundtrip_test bundle_test
 	./rq_roundtrip_test
+	./bundle_test
 
 test-e2e: all
 	./bcast_loopback_test.sh 0 20000 18201
@@ -70,7 +74,8 @@ receiver.o: receiver.c tcp_interface.h kiss.h
 
 transmitter.o: transmitter.c tcp_interface.h kiss.h
 
-daemon.o: daemon.c tcp_interface.h kiss.h mercury_modes.h
+daemon.o: daemon.c tcp_interface.h kiss.h mercury_modes.h bundle.h
+bundle.o: bundle.c bundle.h
 
 kiss.o: kiss.c kiss.h
 

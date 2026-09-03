@@ -29,6 +29,7 @@
 #include "kiss.h"
 #include "mercury_modes.h"
 #include "tcp_interface.h"
+#include "bundle.h"
 
 #include <nanorq.h>
 
@@ -369,6 +370,81 @@ static uint32_t parse_oti_scheme_from_frame(const uint8_t *frame)
     return oti_scheme;
 }
 
+/* Largest object we will read back into memory to look for a bundle.  Above
+ * this the file is still delivered, just under its timestamp name: a filename
+ * is not worth an unbounded allocation driven by a remote sender. */
+#define BUNDLE_UNWRAP_MAX (16u * 1024u * 1024u)
+
+/* A completed object may be one of Mercury's bundles, carrying the sender's
+ * filename.  If it is, rewrite it under that name; if it is not -- which is
+ * what this project's own transmitters send -- leave it as it is.
+ *
+ * Writes the final path into out_path.  Never fails destructively: on any
+ * problem the already-received file is left untouched under its timestamp
+ * name, because a decode that succeeded must not be lost over a rename. */
+static void rx_unwrap_bundle(daemon_ctx_t *ctx, const char *received,
+                             char *out_path, size_t out_path_len)
+{
+    snprintf(out_path, out_path_len, "%s", received);
+
+    FILE *fp = fopen(received, "rb");
+    if (!fp)
+        return;
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return; }
+    long sz = ftell(fp);
+    rewind(fp);
+    if (sz <= 0 || (unsigned long)sz > BUNDLE_UNWRAP_MAX) { fclose(fp); return; }
+
+    uint8_t *buf = malloc((size_t)sz);
+    if (!buf) { fclose(fp); return; }
+    size_t got = fread(buf, 1, (size_t)sz, fp);
+    fclose(fp);
+    if (got != (size_t)sz) { free(buf); return; }
+
+    char name[BUNDLE_NAME_MAX + 1];
+    const uint8_t *payload = NULL;
+    size_t payload_len = 0;
+    if (bundle_parse(buf, got, name, sizeof(name), &payload, &payload_len) != 0)
+    {
+        free(buf);      /* not a bundle: the object is the file */
+        return;
+    }
+
+    /* rx_dir is bounded at PATH_MAX and the name at BUNDLE_NAME_MAX, so give
+     * the joined path room for both rather than letting snprintf truncate --
+     * a truncated path would write to the wrong file. */
+    char named[PATH_MAX + BUNDLE_NAME_MAX + 2];
+    if (snprintf(named, sizeof(named), "%s/%s", ctx->rx_dir, name) >= (int)sizeof(named))
+    {
+        free(buf);
+        return;
+    }
+
+    FILE *of = fopen(named, "wb");
+    if (!of) { free(buf); return; }
+    size_t wrote = fwrite(payload, 1, payload_len, of);
+    fclose(of);
+    if (wrote != payload_len)
+    {
+        remove(named);  /* a half-written file is worse than a wrapped one */
+        free(buf);
+        return;
+    }
+    free(buf);
+
+    /* Only adopt the new path if it fits the caller's buffer; otherwise keep
+     * the received file where it is rather than report a path that is not
+     * where the data actually lives. */
+    if (strlen(named) >= out_path_len)
+    {
+        remove(named);
+        return;
+    }
+
+    remove(received);
+    snprintf(out_path, out_path_len, "%s", named);
+}
+
 static bool rx_session_start(daemon_ctx_t *ctx, rx_session_t *rx, uint64_t oti_common, uint32_t oti_scheme, uint8_t session_id)
 {
     rx_session_reset(rx);
@@ -618,7 +694,13 @@ static void *rx_thread_main(void *arg)
 
         if (rx_session_is_complete(&rx))
         {
-            fprintf(stdout, "RX: FILE RECEIVED -> %s\n", rx.out_path);
+            /* Close the decode target first so everything is on disk, then see
+             * whether it is a bundle carrying the sender's filename. */
+            if (rx.myio) { rx.myio->destroy(rx.myio); rx.myio = NULL; }
+
+            char final_path[PATH_MAX];
+            rx_unwrap_bundle(ctx, rx.out_path, final_path, sizeof(final_path));
+            fprintf(stdout, "RX: FILE RECEIVED -> %s\n", final_path);
             rx.completed_last = true;
             rx.last_completed_session_id = rx.session_id;
             rx.last_completed_oti_common = rx.oti_common;
