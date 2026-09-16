@@ -94,6 +94,14 @@ raptorq/libnanorq.a: $(OBJ)
 	$(AR) rcs $@ $(OBJ)
 
 
+prefix=/usr
+
+.PHONY: install
+install: broadcast_daemon transmitter receiver
+	install -D -m 755 broadcast_daemon $(DESTDIR)$(prefix)/bin/broadcast_daemon
+	install -D -m 755 transmitter $(DESTDIR)$(prefix)/bin/broadcast_transmitter
+	install -D -m 755 receiver $(DESTDIR)$(prefix)/bin/broadcast_receiver
+
 .PHONY: clean
 
 clean:
