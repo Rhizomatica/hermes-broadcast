@@ -73,6 +73,9 @@ typedef struct {
     uint32_t oti_scheme;
     int num_sbn;
     char out_path[PATH_MAX];
+    /* decoded into a hidden file, renamed to out_path once complete: a reader
+     * polling rx_dir must never see an object that is still being decoded */
+    char part_path[PATH_MAX];
     struct ioctx *myio;
     nanorq *rq;
     bool *block_decoded;
@@ -99,6 +102,7 @@ static void rx_session_reset(rx_session_t *rx)
 {
     if (rx->rq) nanorq_free(rx->rq);
     if (rx->myio) rx->myio->destroy(rx->myio);
+    if (rx->part_path[0]) unlink(rx->part_path);   /* abandoned, never completed */
     free(rx->block_decoded);
     free(rx->block_symbols_seen);
     bool completed_last = rx->completed_last;
@@ -455,10 +459,20 @@ static bool rx_session_start(daemon_ctx_t *ctx, rx_session_t *rx, uint64_t oti_c
         return false;
     }
 
-    rx->myio = ioctx_from_file(rx->out_path, 0);
+    const char *base = strrchr(rx->out_path, '/');
+    base = base ? base + 1 : rx->out_path;
+    if (snprintf(rx->part_path, sizeof(rx->part_path), "%s/.%s.part", ctx->rx_dir, base)
+        >= (int)sizeof(rx->part_path))
+    {
+        rx->part_path[0] = 0;
+        fprintf(stderr, "RX: output path too long\n");
+        return false;
+    }
+
+    rx->myio = ioctx_from_file(rx->part_path, 0);
     if (!rx->myio)
     {
-        fprintf(stderr, "RX: failed to open output file: %s\n", rx->out_path);
+        fprintf(stderr, "RX: failed to open output file: %s\n", rx->part_path);
         return false;
     }
 
@@ -697,6 +711,11 @@ static void *rx_thread_main(void *arg)
             /* Close the decode target first so everything is on disk, then see
              * whether it is a bundle carrying the sender's filename. */
             if (rx.myio) { rx.myio->destroy(rx.myio); rx.myio = NULL; }
+            /* only now does the object appear in rx_dir, complete */
+            if (rename(rx.part_path, rx.out_path) != 0)
+                fprintf(stderr, "RX: rename %s -> %s failed: %s\n",
+                        rx.part_path, rx.out_path, strerror(errno));
+            rx.part_path[0] = 0;
 
             char final_path[PATH_MAX];
             rx_unwrap_bundle(ctx, rx.out_path, final_path, sizeof(final_path));
