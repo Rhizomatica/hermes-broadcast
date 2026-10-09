@@ -50,20 +50,23 @@ all: transmitter receiver broadcast_daemon raptorq/libnanorq.a
 # HERMES-local helpers (reduced OTI/tag) that upstream does not; this drives the
 # real wire layout through encode -> loss -> decode and requires a byte-identical
 # file.  Run it after any nanorq update.
-#   make test        round-trip only
+#   make test        coding, bundle and relay regression tests
 #   make test-e2e    also the real transmitter/receiver over a loopback relay
 rq_roundtrip_test: rq_roundtrip_test.c raptorq/libnanorq.a
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ rq_roundtrip_test.c raptorq/libnanorq.a $(LDFLAGS) -lm
 
-.PHONY: test test-e2e
+.PHONY: test test-e2e test-relay
 bundle_test: bundle_test.c bundle.c bundle.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ bundle_test.c bundle.c $(LDFLAGS)
 
-test: rq_roundtrip_test bundle_test
+test-relay:
+	python3 -B -m unittest -v test_bcast_relay.py
+
+test: rq_roundtrip_test bundle_test test-relay
 	./rq_roundtrip_test
 	./bundle_test
 
-test-e2e: all
+test-e2e: all test-relay
 	./bcast_loopback_test.sh 0 20000 18201
 	./bcast_loopback_test.sh 1 20000 18202
 	./bcast_loopback_test.sh 9 60000 18203

@@ -3,9 +3,10 @@
 #
 # Mercury's broadcast port takes ONE client, so a real transfer is TX on one
 # station and RX on another with the HF path in between.  bcast_relay.py stands
-# in for the air: it accepts both clients and pipes the TX byte stream to the RX
-# one.  The KISS framing, the reduced OTI/tag layout and the RaptorQ carousel
-# are therefore all exercised exactly as on the air -- only the modem is absent.
+# in for the path: it accepts both clients and relays the TX stream to RX,
+# translating CMD_MODEM_FRAME (0x03) to Mercury's receive-side CMD_DATA (0x02).
+# This exercises KISS framing, reduced OTI/tag layout and the RaptorQ carousel;
+# it does not exercise the modem or RF channel.
 #
 # Usage: ./bcast_loopback_test.sh [mode] [bytes] [port]
 set -u
