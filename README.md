@@ -72,7 +72,8 @@ sender. See [WIRE-FORMAT.md](WIRE-FORMAT.md) §1.
 ## Tests
 
 ```
-make test        # RaptorQ round-trip through the reduced OTI/tag path
+make test        # coding round-trips, bundle parsing and relay framing
+make test-relay  # Python relay regression checks only (no sockets)
 make test-e2e    # the real transmitter and receiver over a loopback relay
 ```
 
@@ -82,6 +83,12 @@ three HERMES-local helpers (`nanorq_tag_reduced`, `nanorq_oti_common_reduced`,
 them would not necessarily fail a build — a subtly different byte layout
 encodes fine and simply never decodes on the far side. The test drives the real
 wire layout through encode, loss and decode and requires a byte-identical file.
+
+The loopback relay models Mercury's change from transmit-side
+`CMD_MODEM_FRAME` (`0x03`) to receive-side `CMD_DATA` (`0x02`). It preserves the
+escaped payload and tracks frame boundaries across TCP reads. A raw byte relay
+would leave the receiver ignoring every frame. These tests require Python 3;
+they do not simulate the modem or radio channel.
 
 # Compilation
 
